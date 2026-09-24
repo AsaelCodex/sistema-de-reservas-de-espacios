@@ -1,0 +1,45 @@
+# Build results
+bin/
+obj/
+
+# NuGet
+*.nuget.props
+*.nuget.targets
+project.assets.json
+project.nuget.cache
+packages.lock.json
+.nuget/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Rider
+.idea.*
+!.idea/.gitignore
+!.idea/*.sln.iml
+!.idea/modules.xml
+!.idea/workspace.xml
+!.idea/runConfigurations/
+!.idea/dictionaries/
+!.idea/libraries/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User files
+*.user
+*.suo
+*.sln.docstates
+
+# Test results
+TestResults/
+*.trx
+
+# Visual Studio
+.vs/
+*.cache
+*.log
