@@ -26,6 +26,10 @@ packages.lock.json
 !.idea/dictionaries/
 !.idea/libraries/
 
+# Rider / ReSharper Local Cache
+*.DotSettings.user
+_ReSharper.*/
+
 # OS files
 .DS_Store
 Thumbs.db
