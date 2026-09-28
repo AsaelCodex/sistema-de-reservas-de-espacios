@@ -47,3 +47,20 @@ TestResults/
 .vs/
 *.cache
 *.log
+
+# Editor (VS Code)
+.vscode/
+
+# Publicacion .NET
+publish/
+*.nupkg
+
+# Secretos y configuracion local (RD-10)
+.env
+appsettings.*.local.json
+secrets.json
+
+# Bases de datos locales
+*.db
+*.sqlite
+*.sqlite3
