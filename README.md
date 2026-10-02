@@ -39,5 +39,5 @@ dotnet build SistemaDeReservas
 dotnet run --project SistemaDeReservas
 ```
 
-Resultado esperado deberia ser: la consola muestra `Hello, World!`. En esta etapa
+Resultado esperado: la consola muestra `Hello, World!`. En esta etapa
 el proyecto es la estructura inicial y todavía no tiene funcionalidad de reservas.
