@@ -1,7 +1,19 @@
+using Microsoft.EntityFrameworkCore;
+using SistemaDeReservas.Infrastructure.Data;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+var connectionString =
+    Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
 
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException(
+        "DB_CONNECTION_STRING environment variable is not set");
+}
+// Add services to the container.
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(connectionString));
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
