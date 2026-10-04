@@ -42,6 +42,7 @@
 | RF-CA-11 | Restablecimiento con código válido.                          | S2-S4     | Pendiente | —         |
 | RF-CA-12 | Invalidación de sesiones anteriores al cambio de contraseña. | S2-S4     | Pendiente | —         |
 | RF-CA-13 | Administrador puede forzar restablecimiento.                 | S4        | Pendiente | —         |
+| RF-CA-14 | Política mínima de contraseña (8+ caracteres, letras y números). | S2-S4 | Verificado | Tests `PoliticaContraseñaTests` y `RegisterUser_WithPasswordThatViolatesPolicy_ReturnsDatosInvalidos` (SistemaDeReservas.Tests) + `PoliticaContraseña` |
 
 ## Módulo de negocio — Reservas de espacios
 
