@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
+using SistemaDeReservas.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +18,8 @@ if (string.IsNullOrEmpty(connectionString))
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddControllers();
+builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddScoped<RegistroUsuarioService>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
