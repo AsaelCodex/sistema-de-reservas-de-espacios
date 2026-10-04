@@ -3,6 +3,7 @@ using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
 using SistemaDeReservas.Infrastructure.Repositories;
+using SistemaDeReservas.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddControllers();
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddScoped<RegistroUsuarioService>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

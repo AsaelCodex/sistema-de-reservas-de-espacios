@@ -30,7 +30,7 @@
 | ID       | Requisito                                                    | Etapa     | Estado    | Evidencia |
 | -------- | ------------------------------------------------------------ | --------- | --------- | --------- |
 | RF-CA-01 | Registro con correo único.                                   | S2-S4     | Verificado | Tests `RegisterUser_WithNewEmail_CreatesUser` y `RegisterUser_WithExistingEmail_ReturnsConflict` (SistemaDeReservas.Tests) + endpoint `POST /api/usuarios` (409 en correo duplicado) |
-| RF-CA-02 | Contraseña almacenada con hash.                              | S2-S4     | Pendiente | —         |
+| RF-CA-02 | Contraseña almacenada con hash.                              | S2-S4     | Verificado | Tests `Hash_ReturnsValueDifferentFromPassword`, `Verificar_WithOriginalPassword_ReturnsTrue` y `RegisterUser_StoresPasswordHashedNotInPlainText` (SistemaDeReservas.Tests) + `Pbkdf2PasswordHasher` |
 | RF-CA-03 | Inicio de sesión con credencial de sesión.                   | S2-S4     | Pendiente | —         |
 | RF-CA-04 | Roles Administrador y Estándar.                              | S2-S4     | Pendiente | —         |
 | RF-CA-05 | Cada operación declara el rol requerido.                     | S2-S4     | Pendiente | —         |
