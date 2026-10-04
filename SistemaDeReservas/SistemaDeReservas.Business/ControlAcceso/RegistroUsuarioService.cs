@@ -7,12 +7,15 @@ public class RegistroUsuarioService
 {
     private const int LongitudMaximaNombre = 100;
     private const int LongitudMaximaCorreo = 200;
+    private const int LongitudMaximaContraseña = 128;
 
     private readonly IUsuarioRepository _usuarios;
+    private readonly IPasswordHasher _passwordHasher;
 
-    public RegistroUsuarioService(IUsuarioRepository usuarios)
+    public RegistroUsuarioService(IUsuarioRepository usuarios, IPasswordHasher passwordHasher)
     {
         _usuarios = usuarios;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<ResultadoRegistro> RegistrarAsync(
@@ -21,6 +24,7 @@ public class RegistroUsuarioService
     {
         var nombre = solicitud.Nombre?.Trim() ?? string.Empty;
         var correo = solicitud.Correo?.Trim() ?? string.Empty;
+        var contraseña = solicitud.Contraseña ?? string.Empty;
 
         if (nombre.Length == 0 || nombre.Length > LongitudMaximaNombre)
         {
@@ -35,6 +39,12 @@ public class RegistroUsuarioService
                 $"El correo no tiene un formato válido y no puede exceder {LongitudMaximaCorreo} caracteres.");
         }
 
+        if (string.IsNullOrWhiteSpace(contraseña) || contraseña.Length > LongitudMaximaContraseña)
+        {
+            return ResultadoRegistro.DatosInvalidos(
+                $"La contraseña es obligatoria y no puede exceder {LongitudMaximaContraseña} caracteres.");
+        }
+
         var correoNormalizado = correo.ToLowerInvariant();
 
         if (await _usuarios.ExisteCorreoAsync(correoNormalizado, cancellationToken))
@@ -47,7 +57,7 @@ public class RegistroUsuarioService
             Id = Guid.NewGuid(),
             Nombre = nombre,
             Correo = correoNormalizado,
-            ContraseñaHash = string.Empty,
+            ContraseñaHash = _passwordHasher.Hash(contraseña),
             Rol = Rol.Estandar,
             Activo = true
         };

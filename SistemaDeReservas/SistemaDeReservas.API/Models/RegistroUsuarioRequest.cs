@@ -13,4 +13,9 @@ public class RegistroUsuarioRequest
     [EmailAddress]
     [MaxLength(200)]
     public string Correo { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(1)]
+    [MaxLength(128)]
+    public string Contraseña { get; set; } = string.Empty;
 }

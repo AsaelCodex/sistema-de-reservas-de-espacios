@@ -24,7 +24,7 @@ public class UsuariosController : ControllerBase
         CancellationToken cancellationToken)
     {
         var resultado = await _registroUsuario.RegistrarAsync(
-            new SolicitudRegistro(request.Nombre, request.Correo),
+            new SolicitudRegistro(request.Nombre, request.Correo, request.Contraseña),
             cancellationToken);
 
         return resultado.Estado switch
