@@ -1,5 +1,6 @@
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Core.Users;
+using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
 
 namespace SistemaDeReservas.Tests.ControlAcceso;
@@ -7,10 +8,12 @@ namespace SistemaDeReservas.Tests.ControlAcceso;
 public class RegistroUsuarioServiceTests
 {
     private const string Correo = "ana@itla.edu.do";
+    private const string Contraseña = "Secreta123!";
 
     private readonly FakeUsuarioRepository _repositorio = new();
+    private readonly Pbkdf2PasswordHasher _passwordHasher = new();
 
-    private RegistroUsuarioService CrearServicio() => new(_repositorio);
+    private RegistroUsuarioService CrearServicio() => new(_repositorio, _passwordHasher);
 
     [Fact]
     [Trait("Requerimiento", "RF-CA-01")]
@@ -18,7 +21,8 @@ public class RegistroUsuarioServiceTests
     {
         var servicio = CrearServicio();
 
-        var resultado = await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo));
+        var resultado = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
 
         Assert.Equal(EstadoRegistro.Registrado, resultado.Estado);
         Assert.NotNull(resultado.UsuarioId);
@@ -32,9 +36,10 @@ public class RegistroUsuarioServiceTests
     public async Task RegisterUser_WithExistingEmail_ReturnsConflict()
     {
         var servicio = CrearServicio();
-        await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo));
+        await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
 
-        var segundo = await servicio.RegistrarAsync(new SolicitudRegistro("Otro Usuario", Correo));
+        var segundo = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Otro Usuario", Correo, Contraseña));
 
         Assert.Equal(EstadoRegistro.CorreoYaRegistrado, segundo.Estado);
         Assert.Single(_repositorio.Usuarios);
@@ -45,9 +50,10 @@ public class RegistroUsuarioServiceTests
     public async Task RegisterUser_WithExistingEmailInDifferentCase_ReturnsConflict()
     {
         var servicio = CrearServicio();
-        await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo));
+        await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
 
-        var segundo = await servicio.RegistrarAsync(new SolicitudRegistro("Otro Usuario", "ANA@ITLA.EDU.DO"));
+        var segundo = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Otro Usuario", "ANA@ITLA.EDU.DO", Contraseña));
 
         Assert.Equal(EstadoRegistro.CorreoYaRegistrado, segundo.Estado);
         Assert.Single(_repositorio.Usuarios);
@@ -66,10 +72,41 @@ public class RegistroUsuarioServiceTests
         });
         var servicio = CrearServicio();
 
-        var resultado = await servicio.RegistrarAsync(new SolicitudRegistro("Otro Usuario", Correo));
+        var resultado = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Otro Usuario", Correo, Contraseña));
 
         Assert.Equal(EstadoRegistro.CorreoYaRegistrado, resultado.Estado);
         Assert.Single(_repositorio.Usuarios);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-02")]
+    public async Task RegisterUser_StoresPasswordHashedNotInPlainText()
+    {
+        var servicio = CrearServicio();
+
+        await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
+
+        var guardado = Assert.Single(_repositorio.Usuarios);
+        Assert.NotEqual(Contraseña, guardado.ContraseñaHash);
+        Assert.DoesNotContain(Contraseña, guardado.ContraseñaHash);
+        Assert.True(_passwordHasher.Verificar(Contraseña, guardado.ContraseñaHash));
+    }
+
+    [Theory]
+    [Trait("Requerimiento", "RF-CA-02")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task RegisterUser_WithEmptyPassword_ReturnsDatosInvalidos(string? contraseña)
+    {
+        var servicio = CrearServicio();
+
+        var resultado = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Ana Pérez", Correo, contraseña!));
+
+        Assert.Equal(EstadoRegistro.DatosInvalidos, resultado.Estado);
+        Assert.Empty(_repositorio.Usuarios);
     }
 
     [Theory]
@@ -82,7 +119,8 @@ public class RegistroUsuarioServiceTests
     {
         var servicio = CrearServicio();
 
-        var resultado = await servicio.RegistrarAsync(new SolicitudRegistro(nombre, correo));
+        var resultado = await servicio.RegistrarAsync(
+            new SolicitudRegistro(nombre, correo, Contraseña));
 
         Assert.Equal(EstadoRegistro.DatosInvalidos, resultado.Estado);
         Assert.Empty(_repositorio.Usuarios);
