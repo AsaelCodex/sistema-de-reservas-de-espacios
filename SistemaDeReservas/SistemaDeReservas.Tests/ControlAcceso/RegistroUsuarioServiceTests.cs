@@ -110,6 +110,23 @@ public class RegistroUsuarioServiceTests
     }
 
     [Theory]
+    [Trait("Requerimiento", "RF-CA-14")]
+    [InlineData("Ab1")]
+    [InlineData("abcdefgh")]
+    [InlineData("12345678")]
+    public async Task RegisterUser_WithPasswordThatViolatesPolicy_ReturnsDatosInvalidos(string contraseña)
+    {
+        var servicio = CrearServicio();
+
+        var resultado = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Ana Pérez", Correo, contraseña));
+
+        Assert.Equal(EstadoRegistro.DatosInvalidos, resultado.Estado);
+        Assert.Empty(_repositorio.Usuarios);
+        Assert.DoesNotContain(contraseña, resultado.Mensaje);
+    }
+
+    [Theory]
     [Trait("Requerimiento", "RD-07")]
     [InlineData("", "ana@itla.edu.do")]
     [InlineData("   ", "ana@itla.edu.do")]
