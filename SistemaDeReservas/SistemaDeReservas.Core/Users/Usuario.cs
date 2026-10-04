@@ -2,6 +2,7 @@
 
 public class Usuario
 {
+    public Guid Id { get; set; }
     public string Nombre { get; set; } = string.Empty;
     public string Correo { get; set; } = string.Empty;
     public string ContraseñaHash { get; set; } = string.Empty;
