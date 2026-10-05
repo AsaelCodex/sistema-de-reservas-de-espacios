@@ -225,4 +225,59 @@ public class SesionServiceTests
         Assert.Equal(EstadoCierre.SesionInvalida, segundo.Estado);
         Assert.Empty(_sesiones.Sesiones);
     }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-19")]
+    public async Task Iniciar_AfterFiveFailedAttempts_BlocksAccount()
+    {
+        await RegistrarYActivarAsync();
+        var usuario = Assert.Single(_usuarios.Usuarios);
+
+        for (var i = 0; i < 5; i++)
+        {
+            var intento = await _sesion.IniciarAsync(Correo, "NoEsLaCorrecta9!");
+            Assert.Equal(EstadoSesion.CredencialesInvalidas, intento.Estado);
+        }
+
+        Assert.Equal(5, usuario.IntentosFallidos);
+        Assert.NotNull(usuario.BloqueadoHasta);
+        Assert.True(usuario.BloqueadoHasta > DateTime.UtcNow.AddMinutes(14));
+        Assert.Empty(_sesiones.Sesiones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-19")]
+    public async Task Iniciar_DuringLockout_RejectsEvenWithCorrectPassword()
+    {
+        await RegistrarYActivarAsync();
+        for (var i = 0; i < 5; i++)
+        {
+            await _sesion.IniciarAsync(Correo, "NoEsLaCorrecta9!");
+        }
+
+        var resultado = await _sesion.IniciarAsync(Correo, Contraseña);
+
+        Assert.Equal(EstadoSesion.CuentaBloqueada, resultado.Estado);
+        Assert.Empty(_sesiones.Sesiones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-19")]
+    public async Task Iniciar_AfterSuccessfulLogin_ResetsFailureCounter()
+    {
+        await RegistrarYActivarAsync();
+        var usuario = Assert.Single(_usuarios.Usuarios);
+        for (var i = 0; i < 3; i++)
+        {
+            await _sesion.IniciarAsync(Correo, "NoEsLaCorrecta9!");
+        }
+
+        Assert.Equal(3, usuario.IntentosFallidos);
+
+        var resultado = await _sesion.IniciarAsync(Correo, Contraseña);
+
+        Assert.Equal(EstadoSesion.Abierta, resultado.Estado);
+        Assert.Equal(0, usuario.IntentosFallidos);
+        Assert.Null(usuario.BloqueadoHasta);
+    }
 }

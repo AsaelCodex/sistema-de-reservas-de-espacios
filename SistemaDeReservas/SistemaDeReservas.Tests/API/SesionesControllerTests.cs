@@ -159,4 +159,25 @@ public class SesionesControllerTests
         Assert.Equal(StatusCodes.Status401Unauthorized, respuesta.StatusCode);
         Assert.Single(_sesiones.Sesiones);
     }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-19")]
+    public async Task Post_AfterFiveFailures_ReturnsForbiddenOnSixthAttempt()
+    {
+        await RegistrarYActivarAsync();
+
+        for (var i = 0; i < 5; i++)
+        {
+            var fallo = await _controller.Post(
+                Solicitud(Correo, "NoEsLaCorrecta9!"), CancellationToken.None);
+            var respuestaFallo = Assert.IsAssignableFrom<ObjectResult>(fallo);
+            Assert.Equal(StatusCodes.Status401Unauthorized, respuestaFallo.StatusCode);
+        }
+
+        var sexto = await _controller.Post(Solicitud(Correo, Contraseña), CancellationToken.None);
+
+        var bloqueo = Assert.IsAssignableFrom<ObjectResult>(sexto);
+        Assert.Equal(StatusCodes.Status403Forbidden, bloqueo.StatusCode);
+        Assert.Empty(_sesiones.Sesiones);
+    }
 }
