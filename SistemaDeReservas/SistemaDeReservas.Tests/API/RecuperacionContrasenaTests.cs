@@ -20,7 +20,8 @@ public class RecuperacionContrasenaTests
     public RecuperacionContrasenaTests()
     {
         _controller = new RecuperacionContrasenaController(
-            new RecuperacionContrasenaService(_usuarios, _codigos, _colaCorreos));
+            new RecuperacionContrasenaService(
+                _usuarios, _codigos, _colaCorreos, new Pbkdf2PasswordHasher()));
     }
 
     [Fact]

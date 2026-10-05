@@ -5,6 +5,7 @@ using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
+using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
 
 namespace SistemaDeReservas.Tests.API;
@@ -21,7 +22,8 @@ public class CodigoRecuperacionTests
     public CodigoRecuperacionTests()
     {
         _controller = new RecuperacionContrasenaController(
-            new RecuperacionContrasenaService(_usuarios, _codigos, _colaCorreos));
+            new RecuperacionContrasenaService(
+                _usuarios, _codigos, _colaCorreos, new Pbkdf2PasswordHasher()));
     }
 
     [Fact]
