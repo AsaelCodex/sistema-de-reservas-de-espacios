@@ -29,7 +29,8 @@ public class CambioRolTests
             new CambioRolService(_usuarios),
             sesion,
             new CambioEstadoService(_usuarios, _sesiones),
-            new ListadoUsuariosService(_usuarios));
+            new ListadoUsuariosService(_usuarios),
+            new RestablecerContrasenaService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones));
         _filtro = new AutorizacionRolFilter(sesion);
     }
 

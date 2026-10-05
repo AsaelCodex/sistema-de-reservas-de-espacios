@@ -13,17 +13,20 @@ public class AdministracionUsuariosController : ControllerBase
     private readonly SesionService _sesion;
     private readonly CambioEstadoService _cambioEstado;
     private readonly ListadoUsuariosService _listado;
+    private readonly RestablecerContrasenaService _restablecer;
 
     public AdministracionUsuariosController(
         CambioRolService cambioRol,
         SesionService sesion,
         CambioEstadoService cambioEstado,
-        ListadoUsuariosService listado)
+        ListadoUsuariosService listado,
+        RestablecerContrasenaService restablecer)
     {
         _cambioRol = cambioRol;
         _sesion = sesion;
         _cambioEstado = cambioEstado;
         _listado = listado;
+        _restablecer = restablecer;
     }
 
     [HttpGet]
@@ -105,6 +108,34 @@ public class AdministracionUsuariosController : ControllerBase
             EstadoCambioEstado.UsuarioNoEncontrado => NotFound(new { mensaje = resultado.Mensaje }),
             EstadoCambioEstado.AutodesactivacionProhibida =>
                 StatusCode(StatusCodes.Status403Forbidden, new { mensaje = resultado.Mensaje }),
+            _ => BadRequest(new { mensaje = resultado.Mensaje })
+        };
+    }
+
+    [HttpPut("{id:guid}/contrasena")]
+    [RequiereRol(NivelOperacion.Administrador)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PutContrasena(
+        Guid id,
+        [FromBody] RestablecerContrasenaRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var resultado = await _restablecer.RestablecerAsync(
+            id, request?.Contrasena, cancellationToken);
+
+        return resultado.Estado switch
+        {
+            EstadoRestablecimiento.Restablecido => Ok(new
+            {
+                id = resultado.Usuario!.Id,
+                mensaje = resultado.Mensaje
+            }),
+            EstadoRestablecimiento.UsuarioNoEncontrado =>
+                NotFound(new { mensaje = resultado.Mensaje }),
             _ => BadRequest(new { mensaje = resultado.Mensaje })
         };
     }

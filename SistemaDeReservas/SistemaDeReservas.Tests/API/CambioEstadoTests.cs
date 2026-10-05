@@ -40,7 +40,8 @@ public class CambioEstadoTests
             new CambioRolService(_usuarios),
             _sesion,
             new CambioEstadoService(_usuarios, _sesiones),
-            new ListadoUsuariosService(_usuarios));
+            new ListadoUsuariosService(_usuarios),
+            new RestablecerContrasenaService(_usuarios, hasher, _sesiones));
         _filtro = new AutorizacionRolFilter(_sesion);
     }
 
