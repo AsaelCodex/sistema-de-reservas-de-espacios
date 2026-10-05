@@ -13,13 +13,14 @@ namespace SistemaDeReservas.Tests.API;
 public class RecuperacionContrasenaTests
 {
     private readonly FakeUsuarioRepository _usuarios = new();
-    private readonly FakeSesionRepository _sesiones = new();
+    private readonly FakeCodigoRecuperacionRepository _codigos = new();
+    private readonly FakeColaCorreosRepository _colaCorreos = new();
     private readonly RecuperacionContrasenaController _controller;
 
     public RecuperacionContrasenaTests()
     {
         _controller = new RecuperacionContrasenaController(
-            new RecuperacionContrasenaService());
+            new RecuperacionContrasenaService(_usuarios, _codigos, _colaCorreos));
     }
 
     [Fact]
