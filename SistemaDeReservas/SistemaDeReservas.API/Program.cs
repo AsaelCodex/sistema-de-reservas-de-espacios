@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
@@ -19,7 +21,10 @@ if (string.IsNullOrEmpty(connectionString))
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add(new TypeFilterAttribute(typeof(AutorizacionRolFilter)));
+});
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddScoped<ITokenActivacionRepository, TokenActivacionRepository>();
