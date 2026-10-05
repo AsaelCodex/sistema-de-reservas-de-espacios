@@ -39,6 +39,8 @@ public class SesionesController : ControllerBase
                 StatusCode(StatusCodes.Status401Unauthorized, new { mensaje = resultado.Mensaje }),
             EstadoSesion.CuentaNoActiva =>
                 StatusCode(StatusCodes.Status403Forbidden, new { mensaje = resultado.Mensaje }),
+            EstadoSesion.CuentaBloqueada =>
+                StatusCode(StatusCodes.Status403Forbidden, new { mensaje = resultado.Mensaje }),
             _ => BadRequest(new { mensaje = resultado.Mensaje })
         };
     }

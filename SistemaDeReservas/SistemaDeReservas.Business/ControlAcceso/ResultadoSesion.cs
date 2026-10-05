@@ -7,7 +7,8 @@ public enum EstadoSesion
     Abierta,
     DatosInvalidos,
     CredencialesInvalidas,
-    CuentaNoActiva
+    CuentaNoActiva,
+    CuentaBloqueada
 }
 
 public sealed record ResultadoSesion(EstadoSesion Estado, string Mensaje, Sesion? Sesion)
@@ -23,4 +24,8 @@ public sealed record ResultadoSesion(EstadoSesion Estado, string Mensaje, Sesion
 
     public static ResultadoSesion CuentaNoActiva() =>
         new(EstadoSesion.CuentaNoActiva, "La cuenta no está activa.", null);
+
+    public static ResultadoSesion CuentaBloqueada() =>
+        new(EstadoSesion.CuentaBloqueada,
+            "La cuenta está bloqueada por intentos fallidos. Intenta de nuevo más tarde.", null);
 }

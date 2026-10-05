@@ -11,6 +11,8 @@ public class SesionService
     private const int LongitudMaximaToken = 512;
     private const int VigenciaSesionHoras = 24;
     private const int TamanioToken = 32;
+    private const int UmbralIntentos = 5;
+    private const int MinutosBloqueo = 15;
 
     private readonly IUsuarioRepository _usuarios;
     private readonly IPasswordHasher _passwordHasher;
@@ -50,15 +52,38 @@ public class SesionService
         var usuario = await _usuarios.ObtenerPorCorreoAsync(
             correoValor.ToLowerInvariant(), cancellationToken);
 
-        if (usuario is null ||
-            !_passwordHasher.Verificar(contraseñaValor, usuario.ContraseñaHash))
+        if (usuario is null)
         {
+            return ResultadoSesion.CredencialesInvalidas();
+        }
+
+        if (usuario.BloqueadoHasta is not null && usuario.BloqueadoHasta > DateTime.UtcNow)
+        {
+            return ResultadoSesion.CuentaBloqueada();
+        }
+
+        if (!_passwordHasher.Verificar(contraseñaValor, usuario.ContraseñaHash))
+        {
+            usuario.IntentosFallidos++;
+            if (usuario.IntentosFallidos >= UmbralIntentos)
+            {
+                usuario.BloqueadoHasta = DateTime.UtcNow.AddMinutes(MinutosBloqueo);
+            }
+
+            await _usuarios.ActualizarAsync(usuario, cancellationToken);
             return ResultadoSesion.CredencialesInvalidas();
         }
 
         if (!usuario.Activo)
         {
             return ResultadoSesion.CuentaNoActiva();
+        }
+
+        if (usuario.IntentosFallidos != 0 || usuario.BloqueadoHasta is not null)
+        {
+            usuario.IntentosFallidos = 0;
+            usuario.BloqueadoHasta = null;
+            await _usuarios.ActualizarAsync(usuario, cancellationToken);
         }
 
         var emitidaEn = DateTime.UtcNow;
