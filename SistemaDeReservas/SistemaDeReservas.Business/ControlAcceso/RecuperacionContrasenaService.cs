@@ -11,15 +11,18 @@ public class RecuperacionContrasenaService
     private readonly IUsuarioRepository _usuarios;
     private readonly ICodigoRecuperacionRepository _codigos;
     private readonly IColaCorreosRepository _colaCorreos;
+    private readonly IPasswordHasher _passwordHasher;
 
     public RecuperacionContrasenaService(
         IUsuarioRepository usuarios,
         ICodigoRecuperacionRepository codigos,
-        IColaCorreosRepository colaCorreos)
+        IColaCorreosRepository colaCorreos,
+        IPasswordHasher passwordHasher)
     {
         _usuarios = usuarios;
         _codigos = codigos;
         _colaCorreos = colaCorreos;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<ResultadoRecuperacion> IniciarAsync(
@@ -70,5 +73,57 @@ public class RecuperacionContrasenaService
         }
 
         return ResultadoRecuperacion.Iniciado();
+    }
+
+    public async Task<ResultadoCambioContrasena> CambiarContrasenaAsync(
+        string? codigo,
+        string? contrasenaNueva,
+        CancellationToken cancellationToken = default)
+    {
+        var valorCodigo = codigo?.Trim() ?? string.Empty;
+        var contrasena = contrasenaNueva ?? string.Empty;
+
+        if (valorCodigo.Length != RecuperacionContrasena.TamanioCodigo ||
+            !valorCodigo.All(char.IsDigit))
+        {
+            return ResultadoCambioContrasena.DatosInvalidos(
+                $"El código de recuperación debe tener {RecuperacionContrasena.TamanioCodigo} dígitos.");
+        }
+
+        var motivoContraseña = PoliticaContraseña.Validar(contrasena);
+        if (motivoContraseña is not null)
+        {
+            return ResultadoCambioContrasena.DatosInvalidos(motivoContraseña);
+        }
+
+        var registro = await _codigos.ObtenerPorCodigoAsync(valorCodigo, cancellationToken);
+        if (registro is null)
+        {
+            return ResultadoCambioContrasena.CodigoInvalido();
+        }
+
+        if (registro.UsadoEn is not null)
+        {
+            return ResultadoCambioContrasena.CodigoYaUsado();
+        }
+
+        if (registro.VencimientoEn <= DateTime.UtcNow)
+        {
+            return ResultadoCambioContrasena.CodigoVencido();
+        }
+
+        var usuario = await _usuarios.ObtenerPorIdAsync(registro.UsuarioId, cancellationToken);
+        if (usuario is null)
+        {
+            return ResultadoCambioContrasena.CodigoInvalido();
+        }
+
+        usuario.ContraseñaHash = _passwordHasher.Hash(contrasena);
+        await _usuarios.ActualizarAsync(usuario, cancellationToken);
+
+        registro.UsadoEn = DateTime.UtcNow;
+        await _codigos.ActualizarAsync(registro, cancellationToken);
+
+        return ResultadoCambioContrasena.Cambiado();
     }
 }

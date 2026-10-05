@@ -32,4 +32,22 @@ public class RecuperacionContrasenaController : ControllerBase
             _ => BadRequest(new { mensaje = resultado.Mensaje })
         };
     }
+
+    [HttpPost("cambio")]
+    [RequiereRol(NivelOperacion.Publico)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Cambiar(
+        [FromBody] CambiarContrasenaRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var resultado = await _recuperacion.CambiarContrasenaAsync(
+            request?.Codigo, request?.ContrasenaNueva, cancellationToken);
+
+        return resultado.Estado switch
+        {
+            EstadoCambioContrasena.Cambiado => Ok(new { mensaje = resultado.Mensaje }),
+            _ => BadRequest(new { mensaje = resultado.Mensaje })
+        };
+    }
 }

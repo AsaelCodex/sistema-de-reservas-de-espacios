@@ -19,6 +19,24 @@ public sealed class FakeCodigoRecuperacionRepository : ICodigoRecuperacionReposi
         return Task.CompletedTask;
     }
 
+    public Task<CodigoRecuperacion?> ObtenerPorCodigoAsync(string codigo, CancellationToken cancellationToken = default)
+    {
+        var registro = _codigos.FirstOrDefault(c => c.Codigo == codigo);
+        return Task.FromResult(registro);
+    }
+
+    public Task ActualizarAsync(CodigoRecuperacion codigo, CancellationToken cancellationToken = default)
+    {
+        var indice = _codigos.FindIndex(c => c.Id == codigo.Id);
+        if (indice < 0)
+        {
+            throw new InvalidOperationException("El código no existe.");
+        }
+
+        _codigos[indice] = codigo;
+        return Task.CompletedTask;
+    }
+
     public Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default)
     {
         _codigos.RemoveAll(c => c.UsuarioId == usuarioId);
