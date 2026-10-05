@@ -18,4 +18,22 @@ public sealed class FakeTokenActivacionRepository : ITokenActivacionRepository
         _tokens.Add(token);
         return Task.CompletedTask;
     }
+
+    public Task<TokenActivacion?> ObtenerPorTokenAsync(string token, CancellationToken cancellationToken = default)
+    {
+        var registro = _tokens.FirstOrDefault(t => t.Token == token);
+        return Task.FromResult(registro);
+    }
+
+    public Task ActualizarAsync(TokenActivacion token, CancellationToken cancellationToken = default)
+    {
+        var indice = _tokens.FindIndex(t => t.Id == token.Id);
+        if (indice < 0)
+        {
+            throw new InvalidOperationException("El token no existe.");
+        }
+
+        _tokens[indice] = token;
+        return Task.CompletedTask;
+    }
 }

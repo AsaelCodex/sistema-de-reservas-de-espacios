@@ -26,4 +26,22 @@ public sealed class FakeUsuarioRepository : IUsuarioRepository
         _usuarios.Add(usuario);
         return Task.CompletedTask;
     }
+
+    public Task<Usuario?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var usuario = _usuarios.FirstOrDefault(u => u.Id == id);
+        return Task.FromResult(usuario);
+    }
+
+    public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default)
+    {
+        var indice = _usuarios.FindIndex(u => u.Id == usuario.Id);
+        if (indice < 0)
+        {
+            throw new InvalidOperationException("El usuario no existe.");
+        }
+
+        _usuarios[indice] = usuario;
+        return Task.CompletedTask;
+    }
 }
