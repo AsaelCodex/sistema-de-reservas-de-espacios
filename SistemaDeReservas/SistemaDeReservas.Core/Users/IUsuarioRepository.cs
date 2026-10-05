@@ -5,4 +5,8 @@ public interface IUsuarioRepository
     Task<bool> ExisteCorreoAsync(string correo, CancellationToken cancellationToken = default);
 
     Task AgregarAsync(Usuario usuario, CancellationToken cancellationToken = default);
+
+    Task<Usuario?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);
 }

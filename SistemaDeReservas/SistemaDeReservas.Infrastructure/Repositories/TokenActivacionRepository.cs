@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
 
@@ -15,6 +16,18 @@ public class TokenActivacionRepository : ITokenActivacionRepository
     public async Task GuardarAsync(TokenActivacion token, CancellationToken cancellationToken = default)
     {
         _context.TokenActivaciones.Add(token);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<TokenActivacion?> ObtenerPorTokenAsync(string token, CancellationToken cancellationToken = default)
+    {
+        return _context.TokenActivaciones
+            .FirstOrDefaultAsync(t => t.Token == token, cancellationToken);
+    }
+
+    public async Task ActualizarAsync(TokenActivacion token, CancellationToken cancellationToken = default)
+    {
+        _context.TokenActivaciones.Update(token);
         await _context.SaveChangesAsync(cancellationToken);
     }
 }
