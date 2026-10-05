@@ -50,7 +50,7 @@
 | RF-CA-19 | Tras 5 intentos fallidos consecutivos, la cuenta queda bloqueada 15 minutos. | S2-S4 | Verificado | Tests `Iniciar_AfterFiveFailedAttempts_BlocksAccount`, `Iniciar_DuringLockout_RejectsEvenWithCorrectPassword`, `Iniciar_AfterSuccessfulLogin_ResetsFailureCounter` y `Post_AfterFiveFailures_ReturnsForbiddenOnSixthAttempt` (SistemaDeReservas.Tests) + migración `AddBloqueoIntentos` |
 | RF-CA-20 | Un Administrador desactiva y reactiva usuarios. | S2-S4 | Verificado | Endpoint `PUT /api/usuarios/{id}/estado` con `RequiereRol(Administrador)` + revocación de sesiones (`ISesionRepository.EliminarPorUsuarioAsync`); tests `Admin_DeactivatesUser_SessionsStopWorkingAndLoginIsBlocked` y `Admin_CannotDeactivateSelf_ReturnsForbidden` (SistemaDeReservas.Tests) |
 | RF-CA-21 | Un Administrador lista los usuarios con su rol y su estado. | S2-S4 | Verificado | Endpoint `GET /api/usuarios` con `RequiereRol(Administrador)` + `ListadoUsuariosService`; tests `Get_ReturnsAllUsersWithRolAndEstado`, `Get_NeverIncludesHashesNorTokens` y `EstandarUser_ListingUsers_IsRejectedByServer` (SistemaDeReservas.Tests) |
-| RF-CA-22 | Un usuario con sesión cambia su propia contraseña indicando la actual. | S2-S4 | Pendiente | —         |
+| RF-CA-22 | Un usuario con sesión cambia su propia contraseña indicando la actual. | S2-S4 | Verificado | `CambioContrasenaPropiaService` + `PUT api/usuarios/yo/contrasena` (Autenticado; verifica la contraseña actual, aplica RF-CA-14 y RF-CA-12); tests `Cambiar_WithCorrectCurrentPassword_UpdatesPasswordAndInvalidatesSession` y `Cambiar_WithIncorrectCurrentPassword_ReturnsBadRequest` (SistemaDeReservas.Tests) |
 
 ## Módulo de negocio — Reservas de espacios
 
