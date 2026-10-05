@@ -7,4 +7,6 @@ public interface ISesionRepository
     Task<Sesion?> ObtenerPorTokenAsync(string token, CancellationToken cancellationToken = default);
 
     Task EliminarAsync(Sesion sesion, CancellationToken cancellationToken = default);
+
+    Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default);
 }

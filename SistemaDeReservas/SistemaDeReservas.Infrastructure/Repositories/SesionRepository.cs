@@ -30,4 +30,13 @@ public class SesionRepository : ISesionRepository
         _context.Sesiones.Remove(sesion);
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default)
+    {
+        var sesiones = await _context.Sesiones
+            .Where(s => s.UsuarioId == usuarioId)
+            .ToListAsync(cancellationToken);
+        _context.Sesiones.RemoveRange(sesiones);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 }
