@@ -28,7 +28,9 @@ public class UsuariosControllerTests
                 new Pbkdf2PasswordHasher(),
                 _tokens,
                 _colaCorreos),
-            new SesionService(_repositorio, new Pbkdf2PasswordHasher(), _sesiones));
+            new SesionService(_repositorio, new Pbkdf2PasswordHasher(), _sesiones),
+            new CambioContrasenaPropiaService(
+                _repositorio, new Pbkdf2PasswordHasher(), _sesiones));
     }
 
     private async Task<string> AbrirSesionAsync()

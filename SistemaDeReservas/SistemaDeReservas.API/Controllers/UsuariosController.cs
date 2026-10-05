@@ -11,11 +11,16 @@ public class UsuariosController : ControllerBase
 {
     private readonly RegistroUsuarioService _registroUsuario;
     private readonly SesionService _sesion;
+    private readonly CambioContrasenaPropiaService _cambioPropio;
 
-    public UsuariosController(RegistroUsuarioService registroUsuario, SesionService sesion)
+    public UsuariosController(
+        RegistroUsuarioService registroUsuario,
+        SesionService sesion,
+        CambioContrasenaPropiaService cambioPropio)
     {
         _registroUsuario = registroUsuario;
         _sesion = sesion;
+        _cambioPropio = cambioPropio;
     }
 
     [HttpGet("yo")]
@@ -65,6 +70,35 @@ public class UsuariosController : ControllerBase
                 mensaje = resultado.Mensaje
             }),
             EstadoRegistro.CorreoYaRegistrado => Conflict(new { mensaje = resultado.Mensaje }),
+            _ => BadRequest(new { mensaje = resultado.Mensaje })
+        };
+    }
+
+    [HttpPut("yo/contrasena")]
+    [RequiereRol(NivelOperacion.Autenticado)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> PutContrasenaPropia(
+        [FromBody] CambiarContrasenaPropiaRequest? request,
+        [FromHeader(Name = "Authorization")] string? authorization,
+        CancellationToken cancellationToken)
+    {
+        var consulta = await _sesion.ConsultarUsuarioAsync(authorization, cancellationToken);
+        if (consulta.Estado == EstadoConsulta.Rechazado || consulta.Usuario is null)
+        {
+            return StatusCode(StatusCodes.Status401Unauthorized, new { mensaje = consulta.Mensaje });
+        }
+
+        var resultado = await _cambioPropio.CambiarAsync(
+            consulta.Usuario.Id,
+            request?.ContraseñaActual,
+            request?.ContraseñaNueva,
+            cancellationToken);
+
+        return resultado.Estado switch
+        {
+            EstadoCambioContrasenaPropia.Cambiado => Ok(new { mensaje = resultado.Mensaje }),
             _ => BadRequest(new { mensaje = resultado.Mensaje })
         };
     }
