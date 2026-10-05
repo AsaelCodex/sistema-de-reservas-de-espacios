@@ -20,7 +20,11 @@ public class UsuariosControllerTests
     public UsuariosControllerTests()
     {
         _controller = new UsuariosController(
-            new RegistroUsuarioService(_repositorio, new Pbkdf2PasswordHasher()));
+            new RegistroUsuarioService(
+                _repositorio,
+                new Pbkdf2PasswordHasher(),
+                new FakeTokenActivacionRepository(),
+                new FakeColaCorreosRepository()));
     }
 
     [Fact]

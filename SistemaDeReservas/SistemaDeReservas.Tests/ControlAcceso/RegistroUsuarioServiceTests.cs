@@ -1,4 +1,5 @@
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
@@ -11,9 +12,12 @@ public class RegistroUsuarioServiceTests
     private const string Contraseña = "Secreta123!";
 
     private readonly FakeUsuarioRepository _repositorio = new();
+    private readonly FakeTokenActivacionRepository _tokensActivacion = new();
+    private readonly FakeColaCorreosRepository _colaCorreos = new();
     private readonly Pbkdf2PasswordHasher _passwordHasher = new();
 
-    private RegistroUsuarioService CrearServicio() => new(_repositorio, _passwordHasher);
+    private RegistroUsuarioService CrearServicio() =>
+        new(_repositorio, _passwordHasher, _tokensActivacion, _colaCorreos);
 
     [Fact]
     [Trait("Requerimiento", "RF-CA-01")]
@@ -28,7 +32,7 @@ public class RegistroUsuarioServiceTests
         Assert.NotNull(resultado.UsuarioId);
         var guardado = Assert.Single(_repositorio.Usuarios);
         Assert.Equal(Correo, guardado.Correo);
-        Assert.True(guardado.Activo);
+        Assert.False(guardado.Activo);
     }
 
     [Fact]
@@ -107,6 +111,71 @@ public class RegistroUsuarioServiceTests
 
         Assert.Equal(EstadoRegistro.DatosInvalidos, resultado.Estado);
         Assert.Empty(_repositorio.Usuarios);
+    }
+
+    [Theory]
+    [Trait("Requerimiento", "RF-CA-14")]
+    [InlineData("Ab1")]
+    [InlineData("abcdefgh")]
+    [InlineData("12345678")]
+    public async Task RegisterUser_WithPasswordThatViolatesPolicy_ReturnsDatosInvalidos(string contraseña)
+    {
+        var servicio = CrearServicio();
+
+        var resultado = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Ana Pérez", Correo, contraseña));
+
+        Assert.Equal(EstadoRegistro.DatosInvalidos, resultado.Estado);
+        Assert.Empty(_repositorio.Usuarios);
+        Assert.DoesNotContain(contraseña, resultado.Mensaje);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-15")]
+    public async Task RegisterUser_BornsInactive()
+    {
+        var servicio = CrearServicio();
+
+        await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
+
+        var guardado = Assert.Single(_repositorio.Usuarios);
+        Assert.False(guardado.Activo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-15")]
+    public async Task RegisterUser_GeneratesSingleUseActivationTokenWithExpiration()
+    {
+        var servicio = CrearServicio();
+
+        var resultado = await servicio.RegistrarAsync(
+            new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
+
+        var token = Assert.Single(_tokensActivacion.Tokens);
+        Assert.Equal(resultado.UsuarioId, token.UsuarioId);
+        Assert.Matches("^[0-9A-F]+$", token.Token);
+        Assert.Null(token.UsadoEn);
+        Assert.True(token.VencimientoEn > token.EmitidoEn);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-15")]
+    public async Task RegisterUser_EnqueuesActivationEmailInsteadOfSendingIt()
+    {
+        var servicio = CrearServicio();
+
+        await servicio.RegistrarAsync(new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
+
+        var correo = Assert.Single(_colaCorreos.Correos);
+        var token = Assert.Single(_tokensActivacion.Tokens);
+        Assert.Equal(Correo, correo.Destinatario);
+        Assert.Equal(EstadoCorreo.Pendiente, correo.Estado);
+        Assert.Equal(0, correo.Intentos);
+        Assert.Null(correo.FechaEnvio);
+        Assert.NotEmpty(correo.Asunto);
+        Assert.Contains("/activar?token=", correo.Cuerpo);
+        Assert.Contains(token.Token, correo.Cuerpo);
+        Assert.DoesNotContain(Contraseña, correo.Cuerpo);
     }
 
     [Theory]
