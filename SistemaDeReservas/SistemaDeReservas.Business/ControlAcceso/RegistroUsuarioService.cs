@@ -7,7 +7,6 @@ public class RegistroUsuarioService
 {
     private const int LongitudMaximaNombre = 100;
     private const int LongitudMaximaCorreo = 200;
-    private const int LongitudMaximaContraseña = 128;
 
     private readonly IUsuarioRepository _usuarios;
     private readonly IPasswordHasher _passwordHasher;
@@ -39,10 +38,10 @@ public class RegistroUsuarioService
                 $"El correo no tiene un formato válido y no puede exceder {LongitudMaximaCorreo} caracteres.");
         }
 
-        if (string.IsNullOrWhiteSpace(contraseña) || contraseña.Length > LongitudMaximaContraseña)
+        var motivoContraseña = PoliticaContraseña.Validar(contraseña);
+        if (motivoContraseña is not null)
         {
-            return ResultadoRegistro.DatosInvalidos(
-                $"La contraseña es obligatoria y no puede exceder {LongitudMaximaContraseña} caracteres.");
+            return ResultadoRegistro.DatosInvalidos(motivoContraseña);
         }
 
         var correoNormalizado = correo.ToLowerInvariant();
