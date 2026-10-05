@@ -33,6 +33,7 @@ builder.Services.AddScoped<ISesionRepository, SesionRepository>();
 builder.Services.AddScoped<RegistroUsuarioService>();
 builder.Services.AddScoped<ActivacionService>();
 builder.Services.AddScoped<SesionService>();
+builder.Services.AddScoped<CambioRolService>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
