@@ -31,11 +31,11 @@
 | -------- | ------------------------------------------------------------ | --------- | --------- | --------- |
 | RF-CA-01 | Registro con correo único.                                   | S2-S4     | Verificado | Tests `RegisterUser_WithNewEmail_CreatesUser` y `RegisterUser_WithExistingEmail_ReturnsConflict` (SistemaDeReservas.Tests) + endpoint `POST /api/usuarios` (409 en correo duplicado) |
 | RF-CA-02 | Contraseña almacenada con hash.                              | S2-S4     | Verificado | Tests `Hash_ReturnsValueDifferentFromPassword`, `Verificar_WithOriginalPassword_ReturnsTrue` y `RegisterUser_StoresPasswordHashedNotInPlainText` (SistemaDeReservas.Tests) + `Pbkdf2PasswordHasher` |
-| RF-CA-03 | Inicio de sesión con credencial de sesión.                   | S2-S4     | Pendiente | —         |
+| RF-CA-03 | Inicio de sesión con credencial de sesión.                   | S2-S4     | Verificado | Tests `Iniciar_WithValidCredentials_ReturnsPersistedSessionToken` e `Iniciar_WithWrongPassword_ReturnsSameResponseAsUnknownEmail` (SistemaDeReservas.Tests) + endpoint `POST /api/sesiones` |
 | RF-CA-04 | Roles Administrador y Estándar.                              | S2-S4     | Pendiente | —         |
 | RF-CA-05 | Cada operación declara el rol requerido.                     | S2-S4     | Pendiente | —         |
 | RF-CA-06 | Estándar no puede ejecutar operaciones de Administrador.     | S2-S4     | Pendiente | —         |
-| RF-CA-07 | Consulta del usuario autenticado y su rol.                   | S2-S4     | Pendiente | —         |
+| RF-CA-07 | Consulta del usuario autenticado y su rol.                   | S2-S4     | Verificado | Tests `Consultar_WithValidSession_ReturnsUserAndRole`, `Consultar_WithoutValidSessionHeader_ReturnsRechazado`, `Consultar_WithUnknownToken_ReturnsRechazado` y `Consultar_WithExpiredSession_ReturnsRechazado` (SistemaDeReservas.Tests) + endpoint `GET /api/usuarios/yo` |
 | RF-CA-08 | Cambio de rol reservado al Administrador.                    | S2-S4     | Pendiente | —         |
 | RF-CA-09 | Inicio de recuperación mediante correo.                      | S2-S4     | Pendiente | —         |
 | RF-CA-10 | Código de recuperación de un solo uso y vencimiento.         | S2-S4/S11 | Pendiente | —         |
@@ -43,9 +43,14 @@
 | RF-CA-12 | Invalidación de sesiones anteriores al cambio de contraseña. | S2-S4     | Pendiente | —         |
 | RF-CA-13 | Administrador puede forzar restablecimiento.                 | S4        | Pendiente | —         |
 | RF-CA-14 | Política mínima de contraseña (8+ caracteres, letras y números). | S2-S4 | Verificado | Tests `PoliticaContraseñaTests` y `RegisterUser_WithPasswordThatViolatesPolicy_ReturnsDatosInvalidos` (SistemaDeReservas.Tests) + `PoliticaContraseña` |
-| RF-CA-15 | Usuario inactivo al nacer + enlace de activación con token de un solo uso y vencimiento, enviado por cola. | S2-S4 | Implementado | Tests `RegisterUser_BornsInactive`, `RegisterUser_GeneratesSingleUseActivationTokenWithExpiration` y `RegisterUser_EnqueuesActivationEmailInsteadOfSendingIt` + migración `AddTokenActivacionYCorreosEnCola`; el rechazo en inicio de sesión queda pendiente hasta RF-CA-03 |
-| RF-CA-16 | Activación por enlace: la cuenta se activa; el enlace repetido o vencido se rechaza sin cambiar el estado. | S2-S4 | Implementado | Tests `Activar_WithValidToken_ActivatesAccount`, `Activar_Twice_RejectsSecondAttemptWithoutChangingState` y `Activar_WithExpiredToken_RejectsAndKeepsAccountInactive` (SistemaDeReservas.Tests) + endpoint `GET /activar?token=`; que el inicio de sesión funcione tras activar queda pendiente hasta RF-CA-03 |
-| RF-CA-17 | Reenvío del enlace de activación con respuesta idéntica exista o no el correo; el reenvío invalida el enlace anterior. | S2-S4 | Implementado | Tests `Reenviar_WithRegisteredEmail_InvalidatesPreviousLinkAndEnqueuesNewOne` y `Reenviar_ReturnsSameResponseWhetherOrNotEmailExists` (SistemaDeReservas.Tests) + endpoint `POST /activar/reenviar` |
+| RF-CA-15 | Usuario inactivo al nacer + enlace de activación con token de un solo uso y vencimiento, enviado por cola. | S2-S4 | Verificado | Tests `RegisterUser_BornsInactive`, `RegisterUser_GeneratesSingleUseActivationTokenWithExpiration`, `RegisterUser_EnqueuesActivationEmailInsteadOfSendingIt` e `Iniciar_BeforeActivation_ReturnsCuentaNoActivaWithoutOpeningSession` (SistemaDeReservas.Tests) + migración `AddTokenActivacionYCorreosEnCola` |
+| RF-CA-16 | Activación por enlace: la cuenta se activa; el enlace repetido o vencido se rechaza sin cambiar el estado. | S2-S4 | Verificado | Tests `Activar_WithValidToken_ActivatesAccount`, `Activar_Twice_RejectsSecondAttemptWithoutChangingState` y `Activar_WithExpiredToken_RejectsAndKeepsAccountInactive` (SistemaDeReservas.Tests), más `Iniciar_AfterActivation_OpensSession`, + endpoint `GET /activar?token=` |
+| RF-CA-17 | Reenvío del enlace de activación con respuesta idéntica exista o no el correo; el reenvío invalida el enlace anterior. | S2-S4 | Verificado | Tests `Reenviar_WithRegisteredEmail_InvalidatesPreviousLinkAndEnqueuesNewOne` y `Reenviar_ReturnsSameResponseWhetherOrNotEmailExists` (SistemaDeReservas.Tests) + endpoint `POST /activar/reenviar` |
+| RF-CA-18 | Cierre de sesión: la credencial cerrada deja de servir. | S2-S4 | Verificado | Tests `Cerrar_WithValidSession_DestroysCredential`, `Cerrar_Twice_RejectsSecondClose` y `Delete_WithoutValidSession_ReturnsUnauthorized` (SistemaDeReservas.Tests) + endpoint `DELETE /api/sesiones` |
+| RF-CA-19 | Tras 5 intentos fallidos consecutivos, la cuenta queda bloqueada 15 minutos. | S2-S4 | Verificado | Tests `Iniciar_AfterFiveFailedAttempts_BlocksAccount`, `Iniciar_DuringLockout_RejectsEvenWithCorrectPassword`, `Iniciar_AfterSuccessfulLogin_ResetsFailureCounter` y `Post_AfterFiveFailures_ReturnsForbiddenOnSixthAttempt` (SistemaDeReservas.Tests) + migración `AddBloqueoIntentos` |
+| RF-CA-20 | Un Administrador desactiva y reactiva usuarios. | S2-S4 | Pendiente | —         |
+| RF-CA-21 | Un Administrador lista los usuarios con su rol y su estado. | S2-S4 | Pendiente | —         |
+| RF-CA-22 | Un usuario con sesión cambia su propia contraseña indicando la actual. | S2-S4 | Pendiente | —         |
 
 ## Módulo de negocio — Reservas de espacios
 

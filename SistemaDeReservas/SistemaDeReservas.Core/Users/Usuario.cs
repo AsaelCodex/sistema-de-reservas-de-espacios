@@ -8,4 +8,6 @@ public class Usuario
     public string ContraseñaHash { get; set; } = string.Empty;
     public Rol Rol { get; set; }
     public bool Activo { get; set; }
+    public int IntentosFallidos { get; set; }
+    public DateTime? BloqueadoHasta { get; set; }
 }

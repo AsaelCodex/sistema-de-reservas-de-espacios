@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SistemaDeReservas.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using SistemaDeReservas.Infrastructure.Data;
 namespace SistemaDeReservas.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261005025253_AddSesiones")]
+    partial class AddSesiones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -130,9 +133,6 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.Property<bool>("Activo")
                         .HasColumnType("bit");
 
-                    b.Property<DateTime?>("BloqueadoHasta")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("ContraseñaHash")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -140,9 +140,6 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.Property<string>("Correo")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
-
-                    b.Property<int>("IntentosFallidos")
-                        .HasColumnType("int");
 
                     b.Property<string>("Nombre")
                         .IsRequired()
