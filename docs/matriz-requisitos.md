@@ -36,7 +36,7 @@
 | RF-CA-05 | Cada operación declara el rol requerido.                     | S2-S4     | Verificado | Atributo `RequiereRol` y `DeclaracionOperaciones.ObtenerNivel` (API); tests `AllOperations_DeclareRequiredRole` y `Operations_DeclareExpectedLevel` (SistemaDeReservas.Tests) |
 | RF-CA-06 | Estándar no puede ejecutar operaciones de Administrador.     | S2-S4     | Verificado | Filtro global `AutorizacionRolFilter` (lado del servidor); tests `AdminOperation_AsEstandarUser_ReturnsExplicitRejection`, `AdminOperation_WithoutSession_ReturnsUnauthorized` y `AdminOperation_AsAdministrator_IsAllowed` (SistemaDeReservas.Tests) |
 | RF-CA-07 | Consulta del usuario autenticado y su rol.                   | S2-S4     | Verificado | Tests `Consultar_WithValidSession_ReturnsUserAndRole`, `Consultar_WithoutValidSessionHeader_ReturnsRechazado`, `Consultar_WithUnknownToken_ReturnsRechazado` y `Consultar_WithExpiredSession_ReturnsRechazado` (SistemaDeReservas.Tests) + endpoint `GET /api/usuarios/yo` |
-| RF-CA-08 | Cambio de rol reservado al Administrador.                    | S2-S4     | Pendiente | —         |
+| RF-CA-08 | Cambio de rol reservado al Administrador.                    | S2-S4     | Verificado | Endpoint `PUT /api/usuarios/{id}/rol` con `RequiereRol(Administrador)` + `AutorizacionRolFilter`; tests `EstandarUser_ChangingRol_IsRejectedByServer` y `Administrator_ChangingRol_AllowsAndUpdates` (SistemaDeReservas.Tests) |
 | RF-CA-09 | Inicio de recuperación mediante correo.                      | S2-S4     | Pendiente | —         |
 | RF-CA-10 | Código de recuperación de un solo uso y vencimiento.         | S2-S4/S11 | Pendiente | —         |
 | RF-CA-11 | Restablecimiento con código válido.                          | S2-S4     | Pendiente | —         |
