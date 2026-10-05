@@ -36,4 +36,10 @@ public sealed class FakeTokenActivacionRepository : ITokenActivacionRepository
         _tokens[indice] = token;
         return Task.CompletedTask;
     }
+
+    public Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default)
+    {
+        _tokens.RemoveAll(t => t.UsuarioId == usuarioId);
+        return Task.CompletedTask;
+    }
 }

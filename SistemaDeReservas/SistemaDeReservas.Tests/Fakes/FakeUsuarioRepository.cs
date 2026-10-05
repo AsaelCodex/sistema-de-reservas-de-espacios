@@ -33,6 +33,12 @@ public sealed class FakeUsuarioRepository : IUsuarioRepository
         return Task.FromResult(usuario);
     }
 
+    public Task<Usuario?> ObtenerPorCorreoAsync(string correo, CancellationToken cancellationToken = default)
+    {
+        var usuario = _usuarios.FirstOrDefault(u => u.Correo == correo);
+        return Task.FromResult(usuario);
+    }
+
     public Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default)
     {
         var indice = _usuarios.FindIndex(u => u.Id == usuario.Id);

@@ -22,7 +22,7 @@ public class ActivacionServiceTests
             new Pbkdf2PasswordHasher(),
             _tokens,
             _colaCorreos);
-        _activacion = new ActivacionService(_usuarios, _tokens);
+        _activacion = new ActivacionService(_usuarios, _tokens, _colaCorreos);
     }
 
     private async Task RegistrarAsync()
@@ -120,5 +120,78 @@ public class ActivacionServiceTests
         Assert.Equal(EstadoActivacion.DatosInvalidos, resultado.Estado);
         Assert.False(Assert.Single(_usuarios.Usuarios).Activo);
         Assert.Null(registro.UsadoEn);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-17")]
+    public async Task Reenviar_WithRegisteredEmail_InvalidatesPreviousLinkAndEnqueuesNewOne()
+    {
+        await RegistrarAsync();
+        var anterior = Assert.Single(_tokens.Tokens);
+
+        var resultado = await _activacion.ReenviarAsync(Correo);
+
+        Assert.Equal(EstadoReenvio.Enviado, resultado.Estado);
+        var nuevo = Assert.Single(_tokens.Tokens);
+        Assert.NotEqual(anterior.Token, nuevo.Token);
+        Assert.False(Assert.Single(_usuarios.Usuarios).Activo);
+
+        var rechazo = await _activacion.ActivarAsync(anterior.Token);
+        Assert.Equal(EstadoActivacion.TokenInvalido, rechazo.Estado);
+        Assert.False(Assert.Single(_usuarios.Usuarios).Activo);
+
+        var activacion = await _activacion.ActivarAsync(nuevo.Token);
+        Assert.Equal(EstadoActivacion.Activado, activacion.Estado);
+        Assert.True(Assert.Single(_usuarios.Usuarios).Activo);
+
+        Assert.Equal(2, _colaCorreos.Correos.Count);
+        Assert.Contains(nuevo.Token, _colaCorreos.Correos[1].Cuerpo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-17")]
+    public async Task Reenviar_ReturnsSameResponseWhetherOrNotEmailExists()
+    {
+        var inexistente = await _activacion.ReenviarAsync("no.registrado@itla.edu.do");
+        Assert.Empty(_colaCorreos.Correos);
+
+        await RegistrarAsync();
+        var existente = await _activacion.ReenviarAsync(Correo);
+
+        Assert.Equal(EstadoReenvio.Enviado, inexistente.Estado);
+        Assert.Equal(inexistente.Estado, existente.Estado);
+        Assert.Equal(inexistente.Mensaje, existente.Mensaje);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-17")]
+    public async Task Reenviar_WithActiveAccount_ReturnsSameResponseAndDoesNothing()
+    {
+        await RegistrarAsync();
+        var registro = Assert.Single(_tokens.Tokens);
+        await _activacion.ActivarAsync(registro.Token);
+
+        var resultado = await _activacion.ReenviarAsync(Correo);
+
+        Assert.Equal(EstadoReenvio.Enviado, resultado.Estado);
+        Assert.Single(_tokens.Tokens);
+        Assert.Single(_colaCorreos.Correos);
+        Assert.True(Assert.Single(_usuarios.Usuarios).Activo);
+    }
+
+    [Theory]
+    [Trait("Requerimiento", "RD-07")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("no-es-un-correo")]
+    public async Task Reenviar_WithInvalidEmail_ReturnsDatosInvalidos(string? correo)
+    {
+        await RegistrarAsync();
+
+        var resultado = await _activacion.ReenviarAsync(correo);
+
+        Assert.Equal(EstadoReenvio.DatosInvalidos, resultado.Estado);
+        Assert.Single(_tokens.Tokens);
+        Assert.Single(_colaCorreos.Correos);
     }
 }

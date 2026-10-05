@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SistemaDeReservas.API.Controllers;
+using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
@@ -20,7 +22,7 @@ public class ActivacionControllerTests
     public ActivacionControllerTests()
     {
         _controller = new ActivacionController(
-            new ActivacionService(_usuarios, _tokens));
+            new ActivacionService(_usuarios, _tokens, _colaCorreos));
     }
 
     private async Task<string> RegistrarAsync()
@@ -71,5 +73,54 @@ public class ActivacionControllerTests
 
         Assert.IsType<BadRequestObjectResult>(resultado);
         Assert.False(Assert.Single(_usuarios.Usuarios).Activo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-17")]
+    public async Task Reenviar_WithRegisteredEmail_ReturnsOk()
+    {
+        await RegistrarAsync();
+
+        var resultado = await _controller.Reenviar(
+            new ReenviarActivacionRequest { Correo = Correo },
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(resultado);
+        Assert.Equal(2, _colaCorreos.Correos.Count);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-17")]
+    public async Task Reenviar_ReturnsIdenticalResponseWhetherOrNotEmailExists()
+    {
+        var inexistente = await _controller.Reenviar(
+            new ReenviarActivacionRequest { Correo = "no.registrado@itla.edu.do" },
+            CancellationToken.None);
+
+        await RegistrarAsync();
+        var existente = await _controller.Reenviar(
+            new ReenviarActivacionRequest { Correo = Correo },
+            CancellationToken.None);
+
+        var okInexistente = Assert.IsType<OkObjectResult>(inexistente);
+        var okExistente = Assert.IsType<OkObjectResult>(existente);
+        Assert.Equal(okInexistente.StatusCode, okExistente.StatusCode);
+        Assert.Equal(
+            JsonSerializer.Serialize(okInexistente.Value),
+            JsonSerializer.Serialize(okExistente.Value));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Reenviar_WithInvalidEmail_ReturnsBadRequest()
+    {
+        await RegistrarAsync();
+
+        var resultado = await _controller.Reenviar(
+            new ReenviarActivacionRequest { Correo = "no-es-un-correo" },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(resultado);
+        Assert.Single(_colaCorreos.Correos);
     }
 }
