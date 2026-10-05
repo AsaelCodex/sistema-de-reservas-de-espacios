@@ -35,7 +35,7 @@
 | RF-CA-04 | Roles Administrador y Estándar.                              | S2-S4     | Pendiente | —         |
 | RF-CA-05 | Cada operación declara el rol requerido.                     | S2-S4     | Pendiente | —         |
 | RF-CA-06 | Estándar no puede ejecutar operaciones de Administrador.     | S2-S4     | Pendiente | —         |
-| RF-CA-07 | Consulta del usuario autenticado y su rol.                   | S2-S4     | Pendiente | —         |
+| RF-CA-07 | Consulta del usuario autenticado y su rol.                   | S2-S4     | Verificado | Tests `Consultar_WithValidSession_ReturnsUserAndRole`, `Consultar_WithoutValidSessionHeader_ReturnsRechazado`, `Consultar_WithUnknownToken_ReturnsRechazado` y `Consultar_WithExpiredSession_ReturnsRechazado` (SistemaDeReservas.Tests) + endpoint `GET /api/usuarios/yo` |
 | RF-CA-08 | Cambio de rol reservado al Administrador.                    | S2-S4     | Pendiente | —         |
 | RF-CA-09 | Inicio de recuperación mediante correo.                      | S2-S4     | Pendiente | —         |
 | RF-CA-10 | Código de recuperación de un solo uso y vencimiento.         | S2-S4/S11 | Pendiente | —         |
