@@ -18,6 +18,7 @@ public class CambioContrasenaTests
     private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeCodigoRecuperacionRepository _codigos = new();
     private readonly FakeColaCorreosRepository _colaCorreos = new();
+    private readonly FakeSesionRepository _sesiones = new();
     private readonly Pbkdf2PasswordHasher _hasher = new();
     private readonly RecuperacionContrasenaController _controller;
 
@@ -25,7 +26,7 @@ public class CambioContrasenaTests
     {
         _controller = new RecuperacionContrasenaController(
             new RecuperacionContrasenaService(
-                _usuarios, _codigos, _colaCorreos, _hasher));
+                _usuarios, _codigos, _colaCorreos, _hasher, _sesiones));
     }
 
     [Fact]
