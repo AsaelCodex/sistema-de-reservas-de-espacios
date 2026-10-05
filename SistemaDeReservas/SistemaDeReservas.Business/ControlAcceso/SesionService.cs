@@ -80,14 +80,8 @@ public class SesionService
         string? autorizacion,
         CancellationToken cancellationToken = default)
     {
-        var token = ExtraerToken(autorizacion);
-        if (token.Length == 0 || token.Length > LongitudMaximaToken)
-        {
-            return ResultadoConsultaUsuario.Rechazado();
-        }
-
-        var sesion = await _sesiones.ObtenerPorTokenAsync(token, cancellationToken);
-        if (sesion is null || sesion.VencimientoEn <= DateTime.UtcNow)
+        var sesion = await ValidarSesionAsync(autorizacion, cancellationToken);
+        if (sesion is null)
         {
             return ResultadoConsultaUsuario.Rechazado();
         }
@@ -99,6 +93,40 @@ public class SesionService
         }
 
         return ResultadoConsultaUsuario.Encontrado(usuario);
+    }
+
+    public async Task<ResultadoCierre> CerrarAsync(
+        string? autorizacion,
+        CancellationToken cancellationToken = default)
+    {
+        var sesion = await ValidarSesionAsync(autorizacion, cancellationToken);
+        if (sesion is null)
+        {
+            return ResultadoCierre.SesionInvalida();
+        }
+
+        await _sesiones.EliminarAsync(sesion, cancellationToken);
+
+        return ResultadoCierre.Cerrado();
+    }
+
+    private async Task<Sesion?> ValidarSesionAsync(
+        string? autorizacion,
+        CancellationToken cancellationToken)
+    {
+        var token = ExtraerToken(autorizacion);
+        if (token.Length == 0 || token.Length > LongitudMaximaToken)
+        {
+            return null;
+        }
+
+        var sesion = await _sesiones.ObtenerPorTokenAsync(token, cancellationToken);
+        if (sesion is null || sesion.VencimientoEn <= DateTime.UtcNow)
+        {
+            return null;
+        }
+
+        return sesion;
     }
 
     private static string ExtraerToken(string? autorizacion)

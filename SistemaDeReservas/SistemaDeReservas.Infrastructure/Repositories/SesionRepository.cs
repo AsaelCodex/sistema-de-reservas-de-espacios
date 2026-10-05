@@ -24,4 +24,10 @@ public class SesionRepository : ISesionRepository
         return _context.Sesiones
             .FirstOrDefaultAsync(s => s.Token == token, cancellationToken);
     }
+
+    public async Task EliminarAsync(Sesion sesion, CancellationToken cancellationToken = default)
+    {
+        _context.Sesiones.Remove(sesion);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 }

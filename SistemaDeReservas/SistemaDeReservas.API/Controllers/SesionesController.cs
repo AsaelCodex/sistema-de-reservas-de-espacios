@@ -42,4 +42,20 @@ public class SesionesController : ControllerBase
             _ => BadRequest(new { mensaje = resultado.Mensaje })
         };
     }
+
+    [HttpDelete]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Delete(
+        [FromHeader(Name = "Authorization")] string? authorization,
+        CancellationToken cancellationToken)
+    {
+        var resultado = await _sesion.CerrarAsync(authorization, cancellationToken);
+
+        return resultado.Estado switch
+        {
+            EstadoCierre.Cerrado => Ok(new { mensaje = resultado.Mensaje }),
+            _ => StatusCode(StatusCodes.Status401Unauthorized, new { mensaje = resultado.Mensaje })
+        };
+    }
 }
