@@ -1,5 +1,4 @@
 using System.Net.Mail;
-using System.Security.Cryptography;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
 
@@ -9,9 +8,6 @@ public class RegistroUsuarioService
 {
     private const int LongitudMaximaNombre = 100;
     private const int LongitudMaximaCorreo = 200;
-    private const int VigenciaTokenActivacionHoras = 24;
-    private const int TamanioTokenActivacion = 32;
-    private const string AsuntoCorreoActivacion = "Activa tu cuenta";
 
     private readonly IUsuarioRepository _usuarios;
     private readonly IPasswordHasher _passwordHasher;
@@ -83,9 +79,7 @@ public class RegistroUsuarioService
             return ResultadoRegistro.CorreoYaRegistrado(correoNormalizado);
         }
 
-        var emitidoEn = DateTime.UtcNow;
-        var vencimientoEn = emitidoEn.AddHours(VigenciaTokenActivacionHoras);
-        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(TamanioTokenActivacion));
+        var (token, emitidoEn, vencimientoEn) = ActivacionCuenta.CrearToken();
 
         await _tokensActivacion.GuardarAsync(new TokenActivacion
         {
@@ -101,8 +95,8 @@ public class RegistroUsuarioService
         {
             Id = Guid.NewGuid(),
             Destinatario = usuario.Correo,
-            Asunto = AsuntoCorreoActivacion,
-            Cuerpo = ConstruirCuerpoCorreoActivacion(nombre, token, vencimientoEn),
+            Asunto = ActivacionCuenta.AsuntoCorreo,
+            Cuerpo = ActivacionCuenta.ConstruirCuerpoCorreo(nombre, token, vencimientoEn),
             Estado = EstadoCorreo.Pendiente,
             Intentos = 0,
             FechaCreacion = emitidoEn,
@@ -111,20 +105,5 @@ public class RegistroUsuarioService
         }, cancellationToken);
 
         return ResultadoRegistro.Registrado(usuario);
-    }
-
-    private static string ConstruirCuerpoCorreoActivacion(
-        string nombre,
-        string token,
-        DateTime vencimiento)
-    {
-        return string.Join(Environment.NewLine,
-            $"Hola {nombre},",
-            string.Empty,
-            "Tu cuenta está pendiente de activación. Abre este enlace para activarla:",
-            string.Empty,
-            $"/activar?token={token}",
-            string.Empty,
-            $"El enlace vence el {vencimiento:u}.");
     }
 }
