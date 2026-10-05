@@ -1,4 +1,5 @@
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
 
@@ -38,6 +39,13 @@ public class SesionServiceTests
     {
         await RegistrarAsync();
         await _activacion.ActivarAsync(Assert.Single(_tokens.Tokens).Token);
+    }
+
+    private async Task<string> AbrirSesionAsync()
+    {
+        await RegistrarYActivarAsync();
+        var resultado = await _sesion.IniciarAsync(Correo, Contraseña);
+        return resultado.Sesion!.Token;
     }
 
     [Fact]
@@ -114,5 +122,61 @@ public class SesionServiceTests
 
         Assert.Equal(EstadoSesion.DatosInvalidos, resultado.Estado);
         Assert.Empty(_sesiones.Sesiones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-07")]
+    public async Task Consultar_WithValidSession_ReturnsUserAndRole()
+    {
+        var token = await AbrirSesionAsync();
+        var usuario = Assert.Single(_usuarios.Usuarios);
+
+        var resultado = await _sesion.ConsultarUsuarioAsync($"Bearer {token}");
+
+        Assert.Equal(EstadoConsulta.Encontrado, resultado.Estado);
+        Assert.Equal(usuario.Id, resultado.Usuario!.Id);
+        Assert.Equal(Rol.Estandar, resultado.Usuario.Rol);
+    }
+
+    [Theory]
+    [Trait("Requerimiento", "RF-CA-07")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Bearer")]
+    [InlineData("Bearer ")]
+    [InlineData("Basic dXN1YXJpbw==")]
+    public async Task Consultar_WithoutValidSessionHeader_ReturnsRechazado(string? autorizacion)
+    {
+        await AbrirSesionAsync();
+
+        var resultado = await _sesion.ConsultarUsuarioAsync(autorizacion);
+
+        Assert.Equal(EstadoConsulta.Rechazado, resultado.Estado);
+        Assert.Null(resultado.Usuario);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-07")]
+    public async Task Consultar_WithUnknownToken_ReturnsRechazado()
+    {
+        await AbrirSesionAsync();
+
+        var resultado = await _sesion.ConsultarUsuarioAsync("Bearer 0123456789ABCDEF");
+
+        Assert.Equal(EstadoConsulta.Rechazado, resultado.Estado);
+        Assert.Null(resultado.Usuario);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-07")]
+    public async Task Consultar_WithExpiredSession_ReturnsRechazado()
+    {
+        var token = await AbrirSesionAsync();
+        Assert.Single(_sesiones.Sesiones).VencimientoEn = DateTime.UtcNow.AddMinutes(-1);
+
+        var resultado = await _sesion.ConsultarUsuarioAsync($"Bearer {token}");
+
+        Assert.Equal(EstadoConsulta.Rechazado, resultado.Estado);
+        Assert.Null(resultado.Usuario);
     }
 }

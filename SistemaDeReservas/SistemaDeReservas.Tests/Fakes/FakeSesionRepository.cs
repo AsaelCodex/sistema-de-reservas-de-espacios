@@ -18,4 +18,10 @@ public sealed class FakeSesionRepository : ISesionRepository
         _sesiones.Add(sesion);
         return Task.CompletedTask;
     }
+
+    public Task<Sesion?> ObtenerPorTokenAsync(string token, CancellationToken cancellationToken = default)
+    {
+        var sesion = _sesiones.FirstOrDefault(s => s.Token == token);
+        return Task.FromResult(sesion);
+    }
 }
