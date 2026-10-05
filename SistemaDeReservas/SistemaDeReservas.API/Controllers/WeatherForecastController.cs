@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SistemaDeReservas.API.Autorizacion;
 
 namespace SistemaDeReservas.API.Controllers;
 
@@ -12,6 +13,7 @@ public class WeatherForecastController : ControllerBase
     ];
 
     [HttpGet(Name = "GetWeatherForecast")]
+    [RequiereRol(NivelOperacion.Publico)]
     public IEnumerable<WeatherForecast> Get()
     {
         return Enumerable.Range(1, 5).Select(index => new WeatherForecast
