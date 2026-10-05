@@ -12,17 +12,20 @@ public class RecuperacionContrasenaService
     private readonly ICodigoRecuperacionRepository _codigos;
     private readonly IColaCorreosRepository _colaCorreos;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly ISesionRepository _sesiones;
 
     public RecuperacionContrasenaService(
         IUsuarioRepository usuarios,
         ICodigoRecuperacionRepository codigos,
         IColaCorreosRepository colaCorreos,
-        IPasswordHasher passwordHasher)
+        IPasswordHasher passwordHasher,
+        ISesionRepository sesiones)
     {
         _usuarios = usuarios;
         _codigos = codigos;
         _colaCorreos = colaCorreos;
         _passwordHasher = passwordHasher;
+        _sesiones = sesiones;
     }
 
     public async Task<ResultadoRecuperacion> IniciarAsync(
@@ -123,6 +126,8 @@ public class RecuperacionContrasenaService
 
         registro.UsadoEn = DateTime.UtcNow;
         await _codigos.ActualizarAsync(registro, cancellationToken);
+
+        await _sesiones.EliminarPorUsuarioAsync(usuario.Id, cancellationToken);
 
         return ResultadoCambioContrasena.Cambiado();
     }
