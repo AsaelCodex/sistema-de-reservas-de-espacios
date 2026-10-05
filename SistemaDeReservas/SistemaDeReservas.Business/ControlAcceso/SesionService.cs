@@ -8,6 +8,7 @@ public class SesionService
 {
     private const int LongitudMaximaCorreo = 200;
     private const int LongitudMaximaContraseña = 128;
+    private const int LongitudMaximaToken = 512;
     private const int VigenciaSesionHoras = 24;
     private const int TamanioToken = 32;
 
@@ -73,5 +74,43 @@ public class SesionService
         await _sesiones.GuardarAsync(sesion, cancellationToken);
 
         return ResultadoSesion.Abierta(sesion);
+    }
+
+    public async Task<ResultadoConsultaUsuario> ConsultarUsuarioAsync(
+        string? autorizacion,
+        CancellationToken cancellationToken = default)
+    {
+        var token = ExtraerToken(autorizacion);
+        if (token.Length == 0 || token.Length > LongitudMaximaToken)
+        {
+            return ResultadoConsultaUsuario.Rechazado();
+        }
+
+        var sesion = await _sesiones.ObtenerPorTokenAsync(token, cancellationToken);
+        if (sesion is null || sesion.VencimientoEn <= DateTime.UtcNow)
+        {
+            return ResultadoConsultaUsuario.Rechazado();
+        }
+
+        var usuario = await _usuarios.ObtenerPorIdAsync(sesion.UsuarioId, cancellationToken);
+        if (usuario is null)
+        {
+            return ResultadoConsultaUsuario.Rechazado();
+        }
+
+        return ResultadoConsultaUsuario.Encontrado(usuario);
+    }
+
+    private static string ExtraerToken(string? autorizacion)
+    {
+        var valor = autorizacion?.Trim() ?? string.Empty;
+        var separador = valor.IndexOf(' ');
+        if (separador < 0 ||
+            !string.Equals(valor[..separador], "Bearer", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return valor[(separador + 1)..].Trim();
     }
 }

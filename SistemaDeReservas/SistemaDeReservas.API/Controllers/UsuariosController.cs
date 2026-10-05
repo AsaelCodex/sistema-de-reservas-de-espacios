@@ -9,10 +9,36 @@ namespace SistemaDeReservas.API.Controllers;
 public class UsuariosController : ControllerBase
 {
     private readonly RegistroUsuarioService _registroUsuario;
+    private readonly SesionService _sesion;
 
-    public UsuariosController(RegistroUsuarioService registroUsuario)
+    public UsuariosController(RegistroUsuarioService registroUsuario, SesionService sesion)
     {
         _registroUsuario = registroUsuario;
+        _sesion = sesion;
+    }
+
+    [HttpGet("yo")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Get(
+        [FromHeader(Name = "Authorization")] string? authorization,
+        CancellationToken cancellationToken)
+    {
+        var resultado = await _sesion.ConsultarUsuarioAsync(authorization, cancellationToken);
+
+        if (resultado.Estado == EstadoConsulta.Rechazado)
+        {
+            return StatusCode(StatusCodes.Status401Unauthorized, new { mensaje = resultado.Mensaje });
+        }
+
+        var usuario = resultado.Usuario!;
+        return Ok(new
+        {
+            id = usuario.Id,
+            nombre = usuario.Nombre,
+            correo = usuario.Correo,
+            rol = usuario.Rol.ToString()
+        });
     }
 
     [HttpPost]
