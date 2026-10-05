@@ -55,4 +55,10 @@ public class UsuarioRepository : IUsuarioRepository
         _context.Usuarios.Update(usuario);
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<Usuario>> ObtenerTodosAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Usuarios.ToListAsync(cancellationToken);
+    }
 }

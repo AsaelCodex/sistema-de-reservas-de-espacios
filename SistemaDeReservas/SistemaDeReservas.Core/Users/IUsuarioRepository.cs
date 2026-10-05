@@ -11,4 +11,6 @@ public interface IUsuarioRepository
     Task<Usuario?> ObtenerPorCorreoAsync(string correo, CancellationToken cancellationToken = default);
 
     Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Usuario>> ObtenerTodosAsync(CancellationToken cancellationToken = default);
 }

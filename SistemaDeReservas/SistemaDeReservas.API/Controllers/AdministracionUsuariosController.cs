@@ -12,15 +12,37 @@ public class AdministracionUsuariosController : ControllerBase
     private readonly CambioRolService _cambioRol;
     private readonly SesionService _sesion;
     private readonly CambioEstadoService _cambioEstado;
+    private readonly ListadoUsuariosService _listado;
 
     public AdministracionUsuariosController(
         CambioRolService cambioRol,
         SesionService sesion,
-        CambioEstadoService cambioEstado)
+        CambioEstadoService cambioEstado,
+        ListadoUsuariosService listado)
     {
         _cambioRol = cambioRol;
         _sesion = sesion;
         _cambioEstado = cambioEstado;
+        _listado = listado;
+    }
+
+    [HttpGet]
+    [RequiereRol(NivelOperacion.Administrador)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Get(CancellationToken cancellationToken)
+    {
+        var usuarios = await _listado.ListarAsync(cancellationToken);
+
+        return Ok(usuarios.Select(usuario => new
+        {
+            id = usuario.Id,
+            nombre = usuario.Nombre,
+            correo = usuario.Correo,
+            rol = usuario.Rol.ToString(),
+            activo = usuario.Activo
+        }));
     }
 
     [HttpPut("{id:guid}/rol")]

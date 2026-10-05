@@ -35,6 +35,7 @@ builder.Services.AddScoped<ActivacionService>();
 builder.Services.AddScoped<SesionService>();
 builder.Services.AddScoped<CambioRolService>();
 builder.Services.AddScoped<CambioEstadoService>();
+builder.Services.AddScoped<ListadoUsuariosService>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
