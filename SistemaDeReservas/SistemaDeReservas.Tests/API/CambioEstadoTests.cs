@@ -39,7 +39,8 @@ public class CambioEstadoTests
         _controller = new AdministracionUsuariosController(
             new CambioRolService(_usuarios),
             _sesion,
-            new CambioEstadoService(_usuarios, _sesiones));
+            new CambioEstadoService(_usuarios, _sesiones),
+            new ListadoUsuariosService(_usuarios));
         _filtro = new AutorizacionRolFilter(_sesion);
     }
 
