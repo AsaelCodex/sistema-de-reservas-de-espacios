@@ -25,7 +25,10 @@ public class CambioRolTests
     public CambioRolTests()
     {
         var sesion = new SesionService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones);
-        _controller = new AdministracionUsuariosController(new CambioRolService(_usuarios));
+        _controller = new AdministracionUsuariosController(
+            new CambioRolService(_usuarios),
+            sesion,
+            new CambioEstadoService(_usuarios, _sesiones));
         _filtro = new AutorizacionRolFilter(sesion);
     }
 
