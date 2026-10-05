@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<Usuario> Usuarios { get; set; }
     public DbSet<TokenActivacion> TokenActivaciones { get; set; }
     public DbSet<CorreoEnCola> CorreosEnCola { get; set; }
+    public DbSet<Sesion> Sesiones { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +21,9 @@ public class AppDbContext : DbContext
             .IsUnique();
         modelBuilder.Entity<TokenActivacion>()
             .HasIndex(t => t.Token)
+            .IsUnique();
+        modelBuilder.Entity<Sesion>()
+            .HasIndex(s => s.Token)
             .IsUnique();
     }
 }
