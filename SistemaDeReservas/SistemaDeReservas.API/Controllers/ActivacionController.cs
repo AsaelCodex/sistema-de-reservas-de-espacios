@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.ControlAcceso;
 
 namespace SistemaDeReservas.API.Controllers;
@@ -26,6 +27,22 @@ public class ActivacionController : ControllerBase
         return resultado.Estado switch
         {
             EstadoActivacion.Activado => Ok(new { mensaje = resultado.Mensaje }),
+            _ => BadRequest(new { mensaje = resultado.Mensaje })
+        };
+    }
+
+    [HttpPost("reenviar")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Reenviar(
+        [FromBody] ReenviarActivacionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var resultado = await _activacion.ReenviarAsync(request?.Correo, cancellationToken);
+
+        return resultado.Estado switch
+        {
+            EstadoReenvio.Enviado => Ok(new { mensaje = resultado.Mensaje }),
             _ => BadRequest(new { mensaje = resultado.Mensaje })
         };
     }

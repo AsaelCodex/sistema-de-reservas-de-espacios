@@ -8,5 +8,7 @@ public interface IUsuarioRepository
 
     Task<Usuario?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<Usuario?> ObtenerPorCorreoAsync(string correo, CancellationToken cancellationToken = default);
+
     Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);
 }

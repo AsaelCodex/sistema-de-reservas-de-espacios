@@ -45,6 +45,11 @@ public class UsuarioRepository : IUsuarioRepository
         return _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
     }
 
+    public Task<Usuario?> ObtenerPorCorreoAsync(string correo, CancellationToken cancellationToken = default)
+    {
+        return _context.Usuarios.FirstOrDefaultAsync(u => u.Correo == correo, cancellationToken);
+    }
+
     public async Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default)
     {
         _context.Usuarios.Update(usuario);

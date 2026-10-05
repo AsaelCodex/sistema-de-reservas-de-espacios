@@ -7,4 +7,6 @@ public interface ITokenActivacionRepository
     Task<TokenActivacion?> ObtenerPorTokenAsync(string token, CancellationToken cancellationToken = default);
 
     Task ActualizarAsync(TokenActivacion token, CancellationToken cancellationToken = default);
+
+    Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default);
 }

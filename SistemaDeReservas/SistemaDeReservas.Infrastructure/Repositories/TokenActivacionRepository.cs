@@ -30,4 +30,14 @@ public class TokenActivacionRepository : ITokenActivacionRepository
         _context.TokenActivaciones.Update(token);
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default)
+    {
+        var tokens = await _context.TokenActivaciones
+            .Where(t => t.UsuarioId == usuarioId)
+            .ToListAsync(cancellationToken);
+
+        _context.TokenActivaciones.RemoveRange(tokens);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 }
