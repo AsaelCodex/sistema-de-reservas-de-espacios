@@ -43,6 +43,7 @@
 | RF-CA-12 | Invalidación de sesiones anteriores al cambio de contraseña. | S2-S4     | Pendiente | —         |
 | RF-CA-13 | Administrador puede forzar restablecimiento.                 | S4        | Pendiente | —         |
 | RF-CA-14 | Política mínima de contraseña (8+ caracteres, letras y números). | S2-S4 | Verificado | Tests `PoliticaContraseñaTests` y `RegisterUser_WithPasswordThatViolatesPolicy_ReturnsDatosInvalidos` (SistemaDeReservas.Tests) + `PoliticaContraseña` |
+| RF-CA-15 | Usuario inactivo al nacer + enlace de activación con token de un solo uso y vencimiento, enviado por cola. | S2-S4 | Implementado | Tests `RegisterUser_BornsInactive`, `RegisterUser_GeneratesSingleUseActivationTokenWithExpiration` y `RegisterUser_EnqueuesActivationEmailInsteadOfSendingIt` + migración `AddTokenActivacionYCorreosEnCola`; el rechazo en inicio de sesión queda pendiente hasta RF-CA-03 |
 
 ## Módulo de negocio — Reservas de espacios
 

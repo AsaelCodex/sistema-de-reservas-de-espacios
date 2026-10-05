@@ -1,4 +1,6 @@
 using System.Net.Mail;
+using System.Security.Cryptography;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
 
 namespace SistemaDeReservas.Business.ControlAcceso;
@@ -7,14 +9,25 @@ public class RegistroUsuarioService
 {
     private const int LongitudMaximaNombre = 100;
     private const int LongitudMaximaCorreo = 200;
+    private const int VigenciaTokenActivacionHoras = 24;
+    private const int TamanioTokenActivacion = 32;
+    private const string AsuntoCorreoActivacion = "Activa tu cuenta";
 
     private readonly IUsuarioRepository _usuarios;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly ITokenActivacionRepository _tokensActivacion;
+    private readonly IColaCorreosRepository _colaCorreos;
 
-    public RegistroUsuarioService(IUsuarioRepository usuarios, IPasswordHasher passwordHasher)
+    public RegistroUsuarioService(
+        IUsuarioRepository usuarios,
+        IPasswordHasher passwordHasher,
+        ITokenActivacionRepository tokensActivacion,
+        IColaCorreosRepository colaCorreos)
     {
         _usuarios = usuarios;
         _passwordHasher = passwordHasher;
+        _tokensActivacion = tokensActivacion;
+        _colaCorreos = colaCorreos;
     }
 
     public async Task<ResultadoRegistro> RegistrarAsync(
@@ -58,7 +71,7 @@ public class RegistroUsuarioService
             Correo = correoNormalizado,
             ContraseñaHash = _passwordHasher.Hash(contraseña),
             Rol = Rol.Estandar,
-            Activo = true
+            Activo = false
         };
 
         try
@@ -70,6 +83,48 @@ public class RegistroUsuarioService
             return ResultadoRegistro.CorreoYaRegistrado(correoNormalizado);
         }
 
+        var emitidoEn = DateTime.UtcNow;
+        var vencimientoEn = emitidoEn.AddHours(VigenciaTokenActivacionHoras);
+        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(TamanioTokenActivacion));
+
+        await _tokensActivacion.GuardarAsync(new TokenActivacion
+        {
+            Id = Guid.NewGuid(),
+            UsuarioId = usuario.Id,
+            Token = token,
+            EmitidoEn = emitidoEn,
+            VencimientoEn = vencimientoEn,
+            UsadoEn = null
+        }, cancellationToken);
+
+        await _colaCorreos.EncolarAsync(new CorreoEnCola
+        {
+            Id = Guid.NewGuid(),
+            Destinatario = usuario.Correo,
+            Asunto = AsuntoCorreoActivacion,
+            Cuerpo = ConstruirCuerpoCorreoActivacion(nombre, token, vencimientoEn),
+            Estado = EstadoCorreo.Pendiente,
+            Intentos = 0,
+            FechaCreacion = emitidoEn,
+            FechaEnvio = null,
+            UltimoError = null
+        }, cancellationToken);
+
         return ResultadoRegistro.Registrado(usuario);
+    }
+
+    private static string ConstruirCuerpoCorreoActivacion(
+        string nombre,
+        string token,
+        DateTime vencimiento)
+    {
+        return string.Join(Environment.NewLine,
+            $"Hola {nombre},",
+            string.Empty,
+            "Tu cuenta está pendiente de activación. Abre este enlace para activarla:",
+            string.Empty,
+            $"/activar?token={token}",
+            string.Empty,
+            $"El enlace vence el {vencimiento:u}.");
     }
 }
