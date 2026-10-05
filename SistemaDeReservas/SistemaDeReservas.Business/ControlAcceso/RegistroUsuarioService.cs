@@ -1,4 +1,5 @@
 using System.Net.Mail;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
 
 namespace SistemaDeReservas.Business.ControlAcceso;
@@ -10,11 +11,19 @@ public class RegistroUsuarioService
 
     private readonly IUsuarioRepository _usuarios;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly ITokenActivacionRepository _tokensActivacion;
+    private readonly IColaCorreosRepository _colaCorreos;
 
-    public RegistroUsuarioService(IUsuarioRepository usuarios, IPasswordHasher passwordHasher)
+    public RegistroUsuarioService(
+        IUsuarioRepository usuarios,
+        IPasswordHasher passwordHasher,
+        ITokenActivacionRepository tokensActivacion,
+        IColaCorreosRepository colaCorreos)
     {
         _usuarios = usuarios;
         _passwordHasher = passwordHasher;
+        _tokensActivacion = tokensActivacion;
+        _colaCorreos = colaCorreos;
     }
 
     public async Task<ResultadoRegistro> RegistrarAsync(
@@ -58,7 +67,7 @@ public class RegistroUsuarioService
             Correo = correoNormalizado,
             ContraseñaHash = _passwordHasher.Hash(contraseña),
             Rol = Rol.Estandar,
-            Activo = true
+            Activo = false
         };
 
         try
@@ -69,6 +78,31 @@ public class RegistroUsuarioService
         {
             return ResultadoRegistro.CorreoYaRegistrado(correoNormalizado);
         }
+
+        var (token, emitidoEn, vencimientoEn) = ActivacionCuenta.CrearToken();
+
+        await _tokensActivacion.GuardarAsync(new TokenActivacion
+        {
+            Id = Guid.NewGuid(),
+            UsuarioId = usuario.Id,
+            Token = token,
+            EmitidoEn = emitidoEn,
+            VencimientoEn = vencimientoEn,
+            UsadoEn = null
+        }, cancellationToken);
+
+        await _colaCorreos.EncolarAsync(new CorreoEnCola
+        {
+            Id = Guid.NewGuid(),
+            Destinatario = usuario.Correo,
+            Asunto = ActivacionCuenta.AsuntoCorreo,
+            Cuerpo = ActivacionCuenta.ConstruirCuerpoCorreo(nombre, token, vencimientoEn),
+            Estado = EstadoCorreo.Pendiente,
+            Intentos = 0,
+            FechaCreacion = emitidoEn,
+            FechaEnvio = null,
+            UltimoError = null
+        }, cancellationToken);
 
         return ResultadoRegistro.Registrado(usuario);
     }

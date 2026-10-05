@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
 using SistemaDeReservas.Infrastructure.Repositories;
@@ -21,7 +22,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddControllers();
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
+builder.Services.AddScoped<ITokenActivacionRepository, TokenActivacionRepository>();
+builder.Services.AddScoped<IColaCorreosRepository, ColaCorreosRepository>();
 builder.Services.AddScoped<RegistroUsuarioService>();
+builder.Services.AddScoped<ActivacionService>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
