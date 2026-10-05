@@ -30,12 +30,16 @@ builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddScoped<ITokenActivacionRepository, TokenActivacionRepository>();
 builder.Services.AddScoped<IColaCorreosRepository, ColaCorreosRepository>();
 builder.Services.AddScoped<ISesionRepository, SesionRepository>();
+builder.Services.AddScoped<ICodigoRecuperacionRepository, CodigoRecuperacionRepository>();
 builder.Services.AddScoped<RegistroUsuarioService>();
 builder.Services.AddScoped<ActivacionService>();
 builder.Services.AddScoped<SesionService>();
 builder.Services.AddScoped<CambioRolService>();
 builder.Services.AddScoped<CambioEstadoService>();
 builder.Services.AddScoped<ListadoUsuariosService>();
+builder.Services.AddScoped<RestablecerContrasenaService>();
+builder.Services.AddScoped<RecuperacionContrasenaService>();
+builder.Services.AddScoped<CambioContrasenaPropiaService>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
