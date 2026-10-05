@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.ControlAcceso;
 
@@ -16,6 +17,7 @@ public class ActivacionController : ControllerBase
     }
 
     [HttpGet]
+    [RequiereRol(NivelOperacion.Publico)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get(
@@ -32,6 +34,7 @@ public class ActivacionController : ControllerBase
     }
 
     [HttpPost("reenviar")]
+    [RequiereRol(NivelOperacion.Publico)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Reenviar(

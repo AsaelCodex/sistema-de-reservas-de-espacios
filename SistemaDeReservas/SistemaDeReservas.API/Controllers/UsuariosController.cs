@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.ControlAcceso;
 
@@ -18,6 +19,7 @@ public class UsuariosController : ControllerBase
     }
 
     [HttpGet("yo")]
+    [RequiereRol(NivelOperacion.Autenticado)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Get(
@@ -42,6 +44,7 @@ public class UsuariosController : ControllerBase
     }
 
     [HttpPost]
+    [RequiereRol(NivelOperacion.Publico)]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]

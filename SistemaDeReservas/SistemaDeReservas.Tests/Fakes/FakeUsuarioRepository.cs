@@ -50,4 +50,10 @@ public sealed class FakeUsuarioRepository : IUsuarioRepository
         _usuarios[indice] = usuario;
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<Usuario>> ObtenerTodosAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Usuario> usuarios = _usuarios.ToList();
+        return Task.FromResult(usuarios);
+    }
 }

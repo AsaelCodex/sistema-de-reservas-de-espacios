@@ -30,4 +30,10 @@ public sealed class FakeSesionRepository : ISesionRepository
         _sesiones.Remove(sesion);
         return Task.CompletedTask;
     }
+
+    public Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default)
+    {
+        _sesiones.RemoveAll(s => s.UsuarioId == usuarioId);
+        return Task.CompletedTask;
+    }
 }
