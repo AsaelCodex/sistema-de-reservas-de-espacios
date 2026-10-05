@@ -24,4 +24,10 @@ public sealed class FakeSesionRepository : ISesionRepository
         var sesion = _sesiones.FirstOrDefault(s => s.Token == token);
         return Task.FromResult(sesion);
     }
+
+    public Task EliminarAsync(Sesion sesion, CancellationToken cancellationToken = default)
+    {
+        _sesiones.Remove(sesion);
+        return Task.CompletedTask;
+    }
 }

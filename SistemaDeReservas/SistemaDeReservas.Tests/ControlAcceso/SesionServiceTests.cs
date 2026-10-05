@@ -179,4 +179,50 @@ public class SesionServiceTests
         Assert.Equal(EstadoConsulta.Rechazado, resultado.Estado);
         Assert.Null(resultado.Usuario);
     }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-18")]
+    public async Task Cerrar_WithValidSession_DestroysCredential()
+    {
+        var token = await AbrirSesionAsync();
+
+        var resultado = await _sesion.CerrarAsync($"Bearer {token}");
+
+        Assert.Equal(EstadoCierre.Cerrado, resultado.Estado);
+        Assert.Empty(_sesiones.Sesiones);
+
+        var consulta = await _sesion.ConsultarUsuarioAsync($"Bearer {token}");
+        Assert.Equal(EstadoConsulta.Rechazado, consulta.Estado);
+    }
+
+    [Theory]
+    [Trait("Requerimiento", "RF-CA-18")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Bearer")]
+    [InlineData("Bearer ")]
+    [InlineData("Bearer 0123456789ABCDEF")]
+    public async Task Cerrar_WithoutValidSession_ReturnsSesionInvalida(string? autorizacion)
+    {
+        await AbrirSesionAsync();
+
+        var resultado = await _sesion.CerrarAsync(autorizacion);
+
+        Assert.Equal(EstadoCierre.SesionInvalida, resultado.Estado);
+        Assert.Single(_sesiones.Sesiones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-18")]
+    public async Task Cerrar_Twice_RejectsSecondClose()
+    {
+        var token = await AbrirSesionAsync();
+
+        var primero = await _sesion.CerrarAsync($"Bearer {token}");
+        var segundo = await _sesion.CerrarAsync($"Bearer {token}");
+
+        Assert.Equal(EstadoCierre.Cerrado, primero.Estado);
+        Assert.Equal(EstadoCierre.SesionInvalida, segundo.Estado);
+        Assert.Empty(_sesiones.Sesiones);
+    }
 }

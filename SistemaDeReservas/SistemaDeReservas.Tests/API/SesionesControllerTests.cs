@@ -19,12 +19,20 @@ public class SesionesControllerTests
     private readonly FakeTokenActivacionRepository _tokens = new();
     private readonly FakeColaCorreosRepository _colaCorreos = new();
     private readonly FakeSesionRepository _sesiones = new();
+    private readonly SesionService _sesion;
     private readonly SesionesController _controller;
 
     public SesionesControllerTests()
     {
-        _controller = new SesionesController(
-            new SesionService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones));
+        _sesion = new SesionService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones);
+        _controller = new SesionesController(_sesion);
+    }
+
+    private async Task<string> AbrirSesionAsync()
+    {
+        await RegistrarYActivarAsync();
+        var resultado = await _sesion.IniciarAsync(Correo, Contraseña);
+        return resultado.Sesion!.Token;
     }
 
     private async Task RegistrarYActivarAsync()
@@ -117,5 +125,38 @@ public class SesionesControllerTests
 
         Assert.IsType<BadRequestObjectResult>(resultado);
         Assert.Empty(_sesiones.Sesiones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-18")]
+    public async Task Delete_WithValidSession_ReturnsOkAndCredentialStopsWorking()
+    {
+        var token = await AbrirSesionAsync();
+
+        var resultado = await _controller.Delete($"Bearer {token}", CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(resultado);
+        Assert.Empty(_sesiones.Sesiones);
+
+        var consulta = await _sesion.ConsultarUsuarioAsync($"Bearer {token}");
+        Assert.Equal(EstadoConsulta.Rechazado, consulta.Estado);
+    }
+
+    [Theory]
+    [Trait("Requerimiento", "RF-CA-18")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Bearer")]
+    [InlineData("Bearer ")]
+    [InlineData("Bearer 0123456789ABCDEF")]
+    public async Task Delete_WithoutValidSession_ReturnsUnauthorized(string? authorization)
+    {
+        await AbrirSesionAsync();
+
+        var resultado = await _controller.Delete(authorization, CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status401Unauthorized, respuesta.StatusCode);
+        Assert.Single(_sesiones.Sesiones);
     }
 }
