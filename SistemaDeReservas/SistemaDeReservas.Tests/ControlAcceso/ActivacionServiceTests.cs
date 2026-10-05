@@ -7,7 +7,7 @@ namespace SistemaDeReservas.Tests.ControlAcceso;
 public class ActivacionServiceTests
 {
     private const string Correo = "ana@itla.edu.do";
-    private const string Contrase├▒a = "Secreta123!";
+    private const string Contraseña = "Secreta123!";
 
     private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeTokenActivacionRepository _tokens = new();
@@ -28,7 +28,7 @@ public class ActivacionServiceTests
     private async Task RegistrarAsync()
     {
         await _registro.RegistrarAsync(
-            new SolicitudRegistro("Ana P├⌐rez", Correo, Contrase├▒a));
+            new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
     }
 
     [Fact]

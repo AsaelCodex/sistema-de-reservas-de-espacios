@@ -10,7 +10,7 @@ namespace SistemaDeReservas.Tests.API;
 public class ActivacionControllerTests
 {
     private const string Correo = "ana@itla.edu.do";
-    private const string Contrase├▒a = "Secreta123!";
+    private const string Contraseña = "Secreta123!";
 
     private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeTokenActivacionRepository _tokens = new();
@@ -31,7 +31,7 @@ public class ActivacionControllerTests
             _tokens,
             _colaCorreos);
         await registro.RegistrarAsync(
-            new SolicitudRegistro("Ana P├⌐rez", Correo, Contrase├▒a));
+            new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
         return Assert.Single(_tokens.Tokens).Token;
     }
 
