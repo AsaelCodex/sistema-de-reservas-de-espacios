@@ -30,6 +30,7 @@ builder.Services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddScoped<ITokenActivacionRepository, TokenActivacionRepository>();
 builder.Services.AddScoped<IColaCorreosRepository, ColaCorreosRepository>();
 builder.Services.AddScoped<ISesionRepository, SesionRepository>();
+builder.Services.AddScoped<ICodigoRecuperacionRepository, CodigoRecuperacionRepository>();
 builder.Services.AddScoped<RegistroUsuarioService>();
 builder.Services.AddScoped<ActivacionService>();
 builder.Services.AddScoped<SesionService>();
