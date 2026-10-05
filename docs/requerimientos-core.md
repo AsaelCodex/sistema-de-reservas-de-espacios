@@ -74,7 +74,7 @@ Es la base de todo lo demás: ninguna otra pieza se considera terminada si sus o
 | RF-CA-19 | Tras 5 intentos fallidos consecutivos, la cuenta queda bloqueada 15 minutos. | El sexto intento, aun con la contraseña correcta, se rechaza durante el bloqueo. Un inicio de sesión correcto pone el contador en cero. |
 | RF-CA-20 | Un Administrador desactiva y reactiva usuarios. | Un usuario desactivado no inicia sesión y sus sesiones abiertas dejan de ser válidas. Un Administrador no puede desactivarse a sí mismo. |
 | RF-CA-21 | Un Administrador lista los usuarios con su rol y su estado. | Un Estándar recibe rechazo. El listado nunca incluye hashes ni tokens. |
-| RF-CA-22 | Un usuario con sesión cambia su propia contraseña indicando la actual.
+| RF-CA-22 | Un usuario con sesión cambia su propia contraseña indicando la actual. | Con la contraseña actual incorrecta el cambio se rechaza. Al cambiarla aplican RF-CA-14 y RF-CA-12
 
 ### Dependencia de recuperación de contraseña
 
