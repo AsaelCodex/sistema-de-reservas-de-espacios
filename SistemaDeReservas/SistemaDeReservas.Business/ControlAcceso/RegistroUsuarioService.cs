@@ -13,17 +13,20 @@ public class RegistroUsuarioService
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenActivacionRepository _tokensActivacion;
     private readonly IColaCorreosRepository _colaCorreos;
+    private readonly string _publicBaseUrl;
 
     public RegistroUsuarioService(
         IUsuarioRepository usuarios,
         IPasswordHasher passwordHasher,
         ITokenActivacionRepository tokensActivacion,
-        IColaCorreosRepository colaCorreos)
+        IColaCorreosRepository colaCorreos,
+        string publicBaseUrl)
     {
         _usuarios = usuarios;
         _passwordHasher = passwordHasher;
         _tokensActivacion = tokensActivacion;
         _colaCorreos = colaCorreos;
+        _publicBaseUrl = publicBaseUrl;
     }
 
     public async Task<ResultadoRegistro> RegistrarAsync(
@@ -95,8 +98,11 @@ public class RegistroUsuarioService
         {
             Id = Guid.NewGuid(),
             Destinatario = usuario.Correo,
-            Asunto = ActivacionCuenta.AsuntoCorreo,
-            Cuerpo = ActivacionCuenta.ConstruirCuerpoCorreo(nombre, token, vencimientoEn),
+                Asunto = ActivacionCuenta.AsuntoCorreo,
+                Cuerpo = ActivacionCuenta.ConstruirCuerpoCorreo(
+                    nombre,
+                    ActivacionCuenta.ConstruirEnlaceActivacion(_publicBaseUrl, token),
+                    vencimientoEn),
             Estado = EstadoCorreo.Pendiente,
             Intentos = 0,
             FechaCreacion = emitidoEn,

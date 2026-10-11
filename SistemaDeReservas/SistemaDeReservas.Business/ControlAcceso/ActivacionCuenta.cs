@@ -16,14 +16,25 @@ public static class ActivacionCuenta
         return (token, emitidoEn, vencimientoEn);
     }
 
-    public static string ConstruirCuerpoCorreo(string nombre, string token, DateTime vencimiento)
+    public static string ConstruirEnlaceActivacion(string publicBaseUrl, string token)
+    {
+        var baseUrl = publicBaseUrl?.Trim().TrimEnd('/') ?? string.Empty;
+        if (baseUrl.Length == 0)
+        {
+            throw new ArgumentException("La URL pública es obligatoria.", nameof(publicBaseUrl));
+        }
+
+        return $"{baseUrl}/activar?token={token}";
+    }
+
+    public static string ConstruirCuerpoCorreo(string nombre, string enlace, DateTime vencimiento)
     {
         return string.Join(Environment.NewLine,
             $"Hola {nombre},",
             string.Empty,
             "Tu cuenta está pendiente de activación. Abre este enlace para activarla:",
             string.Empty,
-            $"/activar?token={token}",
+            enlace,
             string.Empty,
             $"El enlace vence el {vencimiento:u}.");
     }

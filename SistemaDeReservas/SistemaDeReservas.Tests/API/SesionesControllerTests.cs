@@ -41,10 +41,12 @@ public class SesionesControllerTests
             _usuarios,
             new Pbkdf2PasswordHasher(),
             _tokens,
-            _colaCorreos);
+            _colaCorreos,
+            "https://reservas.itla.edu.do");
         var resultado = await registro.RegistrarAsync(
             new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
-        var activacion = new ActivacionService(_usuarios, _tokens, _colaCorreos);
+        var activacion = new ActivacionService(
+            _usuarios, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
         await activacion.ActivarAsync(Assert.Single(_tokens.Tokens).Token);
     }
 
@@ -96,7 +98,8 @@ public class SesionesControllerTests
             _usuarios,
             new Pbkdf2PasswordHasher(),
             _tokens,
-            _colaCorreos);
+            _colaCorreos,
+            "https://reservas.itla.edu.do");
         await registro.RegistrarAsync(
             new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
 

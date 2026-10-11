@@ -33,8 +33,10 @@ public class CambioEstadoTests
     public CambioEstadoTests()
     {
         var hasher = new Pbkdf2PasswordHasher();
-        _registro = new RegistroUsuarioService(_usuarios, hasher, _tokens, _colaCorreos);
-        _activacion = new ActivacionService(_usuarios, _tokens, _colaCorreos);
+        _registro = new RegistroUsuarioService(
+            _usuarios, hasher, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
+        _activacion = new ActivacionService(
+            _usuarios, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
         _sesion = new SesionService(_usuarios, hasher, _sesiones);
         _controller = new AdministracionUsuariosController(
             new CambioRolService(_usuarios),

@@ -22,7 +22,8 @@ public class ActivacionControllerTests
     public ActivacionControllerTests()
     {
         _controller = new ActivacionController(
-            new ActivacionService(_usuarios, _tokens, _colaCorreos));
+            new ActivacionService(
+                _usuarios, _tokens, _colaCorreos, "https://reservas.itla.edu.do"));
     }
 
     private async Task<string> RegistrarAsync()
@@ -31,7 +32,8 @@ public class ActivacionControllerTests
             _usuarios,
             new Pbkdf2PasswordHasher(),
             _tokens,
-            _colaCorreos);
+            _colaCorreos,
+            "https://reservas.itla.edu.do");
         await registro.RegistrarAsync(
             new SolicitudRegistro("Ana Pérez", Correo, Contraseña));
         return Assert.Single(_tokens.Tokens).Token;

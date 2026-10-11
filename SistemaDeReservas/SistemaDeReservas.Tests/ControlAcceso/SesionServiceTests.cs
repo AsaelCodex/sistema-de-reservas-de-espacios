@@ -24,8 +24,10 @@ public class SesionServiceTests
             _usuarios,
             new Pbkdf2PasswordHasher(),
             _tokens,
-            _colaCorreos);
-        _activacion = new ActivacionService(_usuarios, _tokens, _colaCorreos);
+            _colaCorreos,
+            "https://reservas.itla.edu.do");
+        _activacion = new ActivacionService(
+            _usuarios, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
         _sesion = new SesionService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones);
     }
 

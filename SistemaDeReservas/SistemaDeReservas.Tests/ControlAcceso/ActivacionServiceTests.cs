@@ -8,6 +8,7 @@ public class ActivacionServiceTests
 {
     private const string Correo = "ana@itla.edu.do";
     private const string Contraseña = "Secreta123!";
+    private const string UrlPublica = "https://reservas.itla.edu.do";
 
     private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeTokenActivacionRepository _tokens = new();
@@ -21,8 +22,9 @@ public class ActivacionServiceTests
             _usuarios,
             new Pbkdf2PasswordHasher(),
             _tokens,
-            _colaCorreos);
-        _activacion = new ActivacionService(_usuarios, _tokens, _colaCorreos);
+            _colaCorreos,
+            UrlPublica);
+        _activacion = new ActivacionService(_usuarios, _tokens, _colaCorreos, UrlPublica);
     }
 
     private async Task RegistrarAsync()
@@ -145,7 +147,24 @@ public class ActivacionServiceTests
         Assert.True(Assert.Single(_usuarios.Usuarios).Activo);
 
         Assert.Equal(2, _colaCorreos.Correos.Count);
-        Assert.Contains(nuevo.Token, _colaCorreos.Correos[1].Cuerpo);
+        Assert.Contains(
+            $"{UrlPublica}/activar?token={nuevo.Token}", _colaCorreos.Correos[1].Cuerpo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-15")]
+    public async Task Reenviar_WithBaseUrlEndingInSlash_BuildsAbsoluteLink()
+    {
+        var activacion = new ActivacionService(
+            _usuarios, _tokens, _colaCorreos, $"{UrlPublica}/");
+        await RegistrarAsync();
+
+        await activacion.ReenviarAsync(Correo);
+
+        var token = Assert.Single(_tokens.Tokens);
+        var cuerpo = _colaCorreos.Correos[^1].Cuerpo;
+        Assert.Contains($"{UrlPublica}/activar?token={token.Token}", cuerpo);
+        Assert.DoesNotContain($"{UrlPublica}//activar", cuerpo);
     }
 
     [Fact]
