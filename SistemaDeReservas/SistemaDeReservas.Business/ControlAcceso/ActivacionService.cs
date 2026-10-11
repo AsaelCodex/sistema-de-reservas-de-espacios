@@ -12,15 +12,18 @@ public class ActivacionService
     private readonly IUsuarioRepository _usuarios;
     private readonly ITokenActivacionRepository _tokensActivacion;
     private readonly IColaCorreosRepository _colaCorreos;
+    private readonly string _publicBaseUrl;
 
     public ActivacionService(
         IUsuarioRepository usuarios,
         ITokenActivacionRepository tokensActivacion,
-        IColaCorreosRepository colaCorreos)
+        IColaCorreosRepository colaCorreos,
+        string publicBaseUrl)
     {
         _usuarios = usuarios;
         _tokensActivacion = tokensActivacion;
         _colaCorreos = colaCorreos;
+        _publicBaseUrl = publicBaseUrl;
     }
 
     public async Task<ResultadoActivacion> ActivarAsync(
@@ -103,7 +106,10 @@ public class ActivacionService
                 Id = Guid.NewGuid(),
                 Destinatario = usuario.Correo,
                 Asunto = ActivacionCuenta.AsuntoCorreo,
-                Cuerpo = ActivacionCuenta.ConstruirCuerpoCorreo(usuario.Nombre, token, vencimientoEn),
+                Cuerpo = ActivacionCuenta.ConstruirCuerpoCorreo(
+                    usuario.Nombre,
+                    ActivacionCuenta.ConstruirEnlaceActivacion(_publicBaseUrl, token),
+                    vencimientoEn),
                 Estado = EstadoCorreo.Pendiente,
                 Intentos = 0,
                 FechaCreacion = emitidoEn,

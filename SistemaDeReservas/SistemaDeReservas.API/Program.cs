@@ -18,6 +18,13 @@ if (string.IsNullOrEmpty(connectionString))
     throw new InvalidOperationException(
         "DB_CONNECTION_STRING environment variable is not set");
 }
+
+var publicBaseUrl = builder.Configuration["App:PublicBaseUrl"];
+if (string.IsNullOrEmpty(publicBaseUrl))
+{
+    throw new InvalidOperationException(
+        "App:PublicBaseUrl configuration is not set");
+}
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
@@ -31,8 +38,17 @@ builder.Services.AddScoped<ITokenActivacionRepository, TokenActivacionRepository
 builder.Services.AddScoped<IColaCorreosRepository, ColaCorreosRepository>();
 builder.Services.AddScoped<ISesionRepository, SesionRepository>();
 builder.Services.AddScoped<ICodigoRecuperacionRepository, CodigoRecuperacionRepository>();
-builder.Services.AddScoped<RegistroUsuarioService>();
-builder.Services.AddScoped<ActivacionService>();
+builder.Services.AddScoped(sp => new RegistroUsuarioService(
+    sp.GetRequiredService<IUsuarioRepository>(),
+    sp.GetRequiredService<IPasswordHasher>(),
+    sp.GetRequiredService<ITokenActivacionRepository>(),
+    sp.GetRequiredService<IColaCorreosRepository>(),
+    publicBaseUrl));
+builder.Services.AddScoped(sp => new ActivacionService(
+    sp.GetRequiredService<IUsuarioRepository>(),
+    sp.GetRequiredService<ITokenActivacionRepository>(),
+    sp.GetRequiredService<IColaCorreosRepository>(),
+    publicBaseUrl));
 builder.Services.AddScoped<SesionService>();
 builder.Services.AddScoped<CambioRolService>();
 builder.Services.AddScoped<CambioEstadoService>();
