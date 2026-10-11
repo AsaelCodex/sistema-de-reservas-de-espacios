@@ -87,6 +87,12 @@ dotnet build SistemaDeReservas/SistemaDeReservas.sln
 $env:DB_CONNECTION_STRING = "Server=(localdb)\MSSQLLocalDB;Database=SistemaDeReservas;Trusted_Connection=True;TrustServerCertificate=True"
 ```
 
+   La URL pública usada en los enlaces de activación del correo se
+   toma de `App:PublicBaseUrl`; en desarrollo usa
+   `http://localhost:5137` (`appsettings.Development.json`) y en
+   producción debe definirse con la variable de entorno
+   `App__PublicBaseUrl` (la API también falla al iniciar si falta).
+
 4. Aplicar las migraciones:
 
 ```powershell
