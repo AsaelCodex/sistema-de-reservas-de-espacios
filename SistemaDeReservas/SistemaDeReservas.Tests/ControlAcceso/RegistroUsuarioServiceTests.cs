@@ -10,6 +10,7 @@ public class RegistroUsuarioServiceTests
 {
     private const string Correo = "ana@itla.edu.do";
     private const string Contraseña = "Secreta123!";
+    private const string UrlPublica = "https://reservas.itla.edu.do";
 
     private readonly FakeUsuarioRepository _repositorio = new();
     private readonly FakeTokenActivacionRepository _tokensActivacion = new();
@@ -17,7 +18,7 @@ public class RegistroUsuarioServiceTests
     private readonly Pbkdf2PasswordHasher _passwordHasher = new();
 
     private RegistroUsuarioService CrearServicio() =>
-        new(_repositorio, _passwordHasher, _tokensActivacion, _colaCorreos);
+        new(_repositorio, _passwordHasher, _tokensActivacion, _colaCorreos, UrlPublica);
 
     [Fact]
     [Trait("Requerimiento", "RF-CA-01")]
@@ -173,7 +174,7 @@ public class RegistroUsuarioServiceTests
         Assert.Equal(0, correo.Intentos);
         Assert.Null(correo.FechaEnvio);
         Assert.NotEmpty(correo.Asunto);
-        Assert.Contains("/activar?token=", correo.Cuerpo);
+        Assert.Contains($"{UrlPublica}/activar?token=", correo.Cuerpo);
         Assert.Contains(token.Token, correo.Cuerpo);
         Assert.DoesNotContain(Contraseña, correo.Cuerpo);
     }

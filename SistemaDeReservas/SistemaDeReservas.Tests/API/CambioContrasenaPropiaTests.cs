@@ -26,8 +26,10 @@ public class CambioContrasenaPropiaTests
     public CambioContrasenaPropiaTests()
     {
         var hasher = new Pbkdf2PasswordHasher();
-        _registro = new RegistroUsuarioService(_repositorio, hasher, _tokens, _colaCorreos);
-        _activacion = new ActivacionService(_repositorio, _tokens, _colaCorreos);
+        _registro = new RegistroUsuarioService(
+            _repositorio, hasher, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
+        _activacion = new ActivacionService(
+            _repositorio, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
         _sesion = new SesionService(_repositorio, hasher, _sesiones);
         _controller = new UsuariosController(
             _registro,

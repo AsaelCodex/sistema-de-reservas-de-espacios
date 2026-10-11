@@ -42,7 +42,8 @@ public class RolTests
             usuarios,
             new Pbkdf2PasswordHasher(),
             new FakeTokenActivacionRepository(),
-            new FakeColaCorreosRepository());
+            new FakeColaCorreosRepository(),
+            "https://reservas.itla.edu.do");
 
         await registro.RegistrarAsync(
             new SolicitudRegistro("Ana Pérez", "ana@itla.edu.do", "Secreta123!"));

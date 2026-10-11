@@ -27,7 +27,8 @@ public class UsuariosControllerTests
                 _repositorio,
                 new Pbkdf2PasswordHasher(),
                 _tokens,
-                _colaCorreos),
+                _colaCorreos,
+                "https://reservas.itla.edu.do"),
             new SesionService(_repositorio, new Pbkdf2PasswordHasher(), _sesiones),
             new CambioContrasenaPropiaService(
                 _repositorio, new Pbkdf2PasswordHasher(), _sesiones));
@@ -38,7 +39,8 @@ public class UsuariosControllerTests
         await _controller.Post(
             new RegistroUsuarioRequest { Nombre = "Ana Pérez", Correo = Correo, Contraseña = Contraseña },
             CancellationToken.None);
-        var activacion = new ActivacionService(_repositorio, _tokens, _colaCorreos);
+        var activacion = new ActivacionService(
+            _repositorio, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
         await activacion.ActivarAsync(Assert.Single(_tokens.Tokens).Token);
         var sesion = new SesionService(_repositorio, new Pbkdf2PasswordHasher(), _sesiones);
         var resultado = await sesion.IniciarAsync(Correo, Contraseña);
