@@ -45,11 +45,11 @@ recuperación, cambio y restablecimiento de contraseñas.
 | `GET /api/usuarios/yo` | Usuario autenticado y su rol | Autenticado |
 | `PUT /api/usuarios/yo/contrasena` | Cambio de contraseña propia | Autenticado |
 | `POST /api/recuperacion-contrasena` | Inicio de recuperación por correo | Público |
-| `POST /api/recuperacion-contrasena/cambio` | Restablecimiento con código | Público |
+| `POST /api/recuperacion-contrasena/cambio` | Restablecimiento con correo y código | Público |
 | `GET /api/usuarios` | Listado de usuarios | Administrador |
 | `PUT /api/usuarios/{id}/rol` | Cambio de rol | Administrador |
 | `PUT /api/usuarios/{id}/estado` | Desactivar/reactivar | Administrador |
-| `PUT /api/usuarios/{id}/contrasena` | Restablecimiento forzado | Administrador |
+| `PUT /api/usuarios/{id}/contrasena` | Restablecimiento forzado (envía código al correo) | Administrador |
 
 - **Pendiente (piezas posteriores):** Gestión de Permisos (RF-GP),
   Manejador de Documentos (RF-DOC), Notificaciones (RF-NOT, hoy el Core
