@@ -6,7 +6,8 @@ public enum EstadoCambioContrasena
     DatosInvalidos,
     CodigoInvalido,
     CodigoVencido,
-    CodigoYaUsado
+    CodigoYaUsado,
+    CodigoAgotado
 }
 
 public sealed record ResultadoCambioContrasena(EstadoCambioContrasena Estado, string Mensaje)
@@ -25,4 +26,9 @@ public sealed record ResultadoCambioContrasena(EstadoCambioContrasena Estado, st
 
     public static ResultadoCambioContrasena CodigoYaUsado() =>
         new(EstadoCambioContrasena.CodigoYaUsado, "El código de recuperación ya fue usado.");
+
+    public static ResultadoCambioContrasena CodigoAgotado() =>
+        new(
+            EstadoCambioContrasena.CodigoAgotado,
+            "El código de recuperación superó el límite de intentos.");
 }

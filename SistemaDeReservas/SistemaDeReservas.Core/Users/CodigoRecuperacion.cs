@@ -9,4 +9,5 @@ public class CodigoRecuperacion
     public DateTime EmitidoEn { get; set; }
     public DateTime VencimientoEn { get; set; }
     public DateTime? UsadoEn { get; set; }
+    public int Intentos { get; set; }
 }

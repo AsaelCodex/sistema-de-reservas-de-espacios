@@ -25,6 +25,14 @@ public class CodigoRecuperacionRepository : ICodigoRecuperacionRepository
             .FirstOrDefaultAsync(c => c.Codigo == codigo, cancellationToken);
     }
 
+    public Task<CodigoRecuperacion?> ObtenerPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default)
+    {
+        return _context.CodigosRecuperacion
+            .Where(c => c.UsuarioId == usuarioId)
+            .OrderByDescending(c => c.EmitidoEn)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task ActualizarAsync(CodigoRecuperacion codigo, CancellationToken cancellationToken = default)
     {
         _context.CodigosRecuperacion.Update(codigo);

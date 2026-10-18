@@ -43,6 +43,7 @@ public class InvalidacionSesionesTests
         var canje = await _controller.Cambiar(
             new CambiarContrasenaRequest
             {
+                Correo = Correo,
                 Codigo = codigo,
                 ContrasenaNueva = ContraseñaNueva
             },

@@ -42,7 +42,7 @@ public class RecuperacionContrasenaController : ControllerBase
         CancellationToken cancellationToken)
     {
         var resultado = await _recuperacion.CambiarContrasenaAsync(
-            request?.Codigo, request?.ContrasenaNueva, cancellationToken);
+            request?.Correo, request?.Codigo, request?.ContrasenaNueva, cancellationToken);
 
         return resultado.Estado switch
         {

@@ -92,6 +92,7 @@ public class RestablecerContrasenaTests
         var canje = await _recuperacion.Cambiar(
             new CambiarContrasenaRequest
             {
+                Correo = Correo,
                 Codigo = codigo,
                 ContrasenaNueva = ContraseñaNueva
             },
