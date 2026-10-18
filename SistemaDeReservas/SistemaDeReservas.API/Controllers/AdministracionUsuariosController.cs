@@ -115,28 +115,23 @@ public class AdministracionUsuariosController : ControllerBase
     [HttpPut("{id:guid}/contrasena")]
     [RequiereRol(NivelOperacion.Administrador)]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> PutContrasena(
         Guid id,
-        [FromBody] RestablecerContrasenaRequest? request,
         CancellationToken cancellationToken)
     {
-        var resultado = await _restablecer.RestablecerAsync(
-            id, request?.Contrasena, cancellationToken);
+        var resultado = await _restablecer.RestablecerAsync(id, cancellationToken);
 
         return resultado.Estado switch
         {
-            EstadoRestablecimiento.Restablecido => Ok(new
+            EstadoRestablecimiento.CodigoEnviado => Ok(new
             {
                 id = resultado.Usuario!.Id,
                 mensaje = resultado.Mensaje
             }),
-            EstadoRestablecimiento.UsuarioNoEncontrado =>
-                NotFound(new { mensaje = resultado.Mensaje }),
-            _ => BadRequest(new { mensaje = resultado.Mensaje })
+            _ => NotFound(new { mensaje = resultado.Mensaje })
         };
     }
 }

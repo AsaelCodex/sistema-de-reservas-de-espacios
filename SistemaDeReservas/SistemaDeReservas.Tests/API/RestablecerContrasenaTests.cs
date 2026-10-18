@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -9,6 +8,7 @@ using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Controllers;
 using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
@@ -24,44 +24,79 @@ public class RestablecerContrasenaTests
     private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeSesionRepository _sesiones = new();
     private readonly FakeTokenActivacionRepository _tokens = new();
+    private readonly FakeCodigoRecuperacionRepository _codigos = new();
     private readonly FakeColaCorreosRepository _colaCorreos = new();
+    private readonly Pbkdf2PasswordHasher _hasher = new();
     private readonly RegistroUsuarioService _registro;
     private readonly ActivacionService _activacion;
     private readonly SesionService _sesion;
+    private readonly RecuperacionContrasenaController _recuperacion;
     private readonly AdministracionUsuariosController _controller;
     private readonly AutorizacionRolFilter _filtro;
 
     public RestablecerContrasenaTests()
     {
-        var hasher = new Pbkdf2PasswordHasher();
         _registro = new RegistroUsuarioService(
-            _usuarios, hasher, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
+            _usuarios, _hasher, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
         _activacion = new ActivacionService(
             _usuarios, _tokens, _colaCorreos, "https://reservas.itla.edu.do");
-        _sesion = new SesionService(_usuarios, hasher, _sesiones);
+        _sesion = new SesionService(_usuarios, _hasher, _sesiones);
+        _recuperacion = new RecuperacionContrasenaController(
+            new RecuperacionContrasenaService(
+                _usuarios, _codigos, _colaCorreos, _hasher, _sesiones));
         _controller = new AdministracionUsuariosController(
             new CambioRolService(_usuarios),
             _sesion,
             new CambioEstadoService(_usuarios, _sesiones),
             new ListadoUsuariosService(_usuarios),
-            new RestablecerContrasenaService(_usuarios, hasher, _sesiones));
+            new RestablecerContrasenaService(_usuarios, _codigos, _colaCorreos));
         _filtro = new AutorizacionRolFilter(_sesion);
     }
 
     [Fact]
     [Trait("Requerimiento", "RF-CA-13")]
-    public async Task Admin_ResetsPassword_OldStopsWorkingAndSessionsRejected()
+    public async Task Admin_ForcedReset_EnqueuesCodeWithoutChangingPassword()
+    {
+        var usuario = await RegistrarYActivarAsync(Correo);
+        await CrearUsuarioAsync(Rol.Administrador);
+
+        var resultado = await _controller.PutContrasena(usuario.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(resultado);
+
+        var codigo = Assert.Single(_codigos.Codigos);
+        Assert.Equal(usuario.Id, codigo.UsuarioId);
+        Assert.Null(codigo.UsadoEn);
+
+        var correo = _colaCorreos.Correos[^1];
+        Assert.Equal(Correo, correo.Destinatario);
+        Assert.Equal(EstadoCorreo.Pendiente, correo.Estado);
+        Assert.Contains(codigo.Codigo, correo.Cuerpo);
+
+        var actualizado = await _usuarios.ObtenerPorIdAsync(usuario.Id);
+        Assert.True(_hasher.Verificar(Contraseña, actualizado!.ContraseñaHash));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-13")]
+    public async Task Admin_ForcedReset_WithRedemption_OldStopsWorkingAndSessionsRejected()
     {
         var usuario = await RegistrarYActivarAsync(Correo);
         var sesion = await _sesion.IniciarAsync(Correo, Contraseña);
         var tokenAntes = sesion.Sesion!.Token;
 
-        var resultado = await _controller.PutContrasena(
-            usuario.Id,
-            new RestablecerContrasenaRequest { Contrasena = ContraseñaNueva },
-            CancellationToken.None);
-
+        var resultado = await _controller.PutContrasena(usuario.Id, CancellationToken.None);
         Assert.IsType<OkObjectResult>(resultado);
+
+        var codigo = Assert.Single(_codigos.Codigos).Codigo;
+        var canje = await _recuperacion.Cambiar(
+            new CambiarContrasenaRequest
+            {
+                Codigo = codigo,
+                ContrasenaNueva = ContraseñaNueva
+            },
+            CancellationToken.None);
+        Assert.IsType<OkObjectResult>(canje);
 
         var consulta = await _sesion.ConsultarUsuarioAsync($"Bearer {tokenAntes}");
         Assert.Equal(EstadoConsulta.Rechazado, consulta.Estado);
@@ -75,65 +110,21 @@ public class RestablecerContrasenaTests
 
     [Fact]
     [Trait("Requerimiento", "RF-CA-13")]
-    public async Task PutContrasena_ResetsTargetUserPassword()
-    {
-        var objetivo = await RegistrarYActivarAsync("objetivo@itla.edu.do");
-        var administrador = await CrearUsuarioAsync(Rol.Administrador);
-
-        var resultado = await _controller.PutContrasena(
-            objetivo.Id,
-            new RestablecerContrasenaRequest { Contrasena = ContraseñaNueva },
-            CancellationToken.None);
-
-        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
-        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
-
-        var loginAnterior = await _sesion.IniciarAsync("objetivo@itla.edu.do", Contraseña);
-        Assert.Equal(EstadoSesion.CredencialesInvalidas, loginAnterior.Estado);
-
-        var loginNueva = await _sesion.IniciarAsync("objetivo@itla.edu.do", ContraseñaNueva);
-        Assert.Equal(EstadoSesion.Abierta, loginNueva.Estado);
-    }
-
-    [Fact]
-    [Trait("Requerimiento", "RF-CA-14")]
-    public async Task PutContrasena_WithPasswordThatViolatesPolicy_ReturnsBadRequest()
-    {
-        var usuario = await RegistrarYActivarAsync(Correo);
-        var hashOriginal = usuario.ContraseñaHash;
-        var administrador = await CrearUsuarioAsync(Rol.Administrador);
-
-        var resultado = await _controller.PutContrasena(
-            usuario.Id,
-            new RestablecerContrasenaRequest { Contrasena = "corta" },
-            CancellationToken.None);
-
-        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
-        Assert.Equal(StatusCodes.Status400BadRequest, respuesta.StatusCode);
-        var actualizado = await _usuarios.ObtenerPorIdAsync(usuario.Id);
-        Assert.Equal(hashOriginal, actualizado!.ContraseñaHash);
-    }
-
-    [Fact]
-    [Trait("Requerimiento", "RF-CA-13")]
     public async Task PutContrasena_WithUnknownUser_ReturnsNotFound()
     {
-        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        await CrearUsuarioAsync(Rol.Administrador);
 
-        var resultado = await _controller.PutContrasena(
-            Guid.NewGuid(),
-            new RestablecerContrasenaRequest { Contrasena = ContraseñaNueva },
-            CancellationToken.None);
+        var resultado = await _controller.PutContrasena(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(resultado);
+        Assert.Empty(_codigos.Codigos);
     }
 
     [Fact]
     [Trait("Requerimiento", "RF-CA-05")]
     public async Task EstandarUser_ResetsPassword_IsRejectedByServer()
     {
-        var usuario = await RegistrarYActivarAsync(Correo);
-        var hashOriginal = usuario.ContraseñaHash;
+        await RegistrarYActivarAsync(Correo);
         var estandar = await CrearUsuarioAsync(Rol.Estandar);
         var token = await AbrirSesionAsync(estandar);
         var contexto = Contexto($"Bearer {token}", AccionRestablecer());
@@ -142,8 +133,7 @@ public class RestablecerContrasenaTests
 
         var respuesta = Assert.IsType<ObjectResult>(contexto.Result);
         Assert.Equal(StatusCodes.Status403Forbidden, respuesta.StatusCode);
-        var actualizado = await _usuarios.ObtenerPorIdAsync(usuario.Id);
-        Assert.Equal(hashOriginal, actualizado!.ContraseñaHash);
+        Assert.Empty(_codigos.Codigos);
     }
 
     private async Task<Usuario> RegistrarYActivarAsync(string correo)

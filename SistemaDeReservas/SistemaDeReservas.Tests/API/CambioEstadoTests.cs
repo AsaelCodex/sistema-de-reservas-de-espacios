@@ -43,7 +43,8 @@ public class CambioEstadoTests
             _sesion,
             new CambioEstadoService(_usuarios, _sesiones),
             new ListadoUsuariosService(_usuarios),
-            new RestablecerContrasenaService(_usuarios, hasher, _sesiones));
+            new RestablecerContrasenaService(
+                _usuarios, new FakeCodigoRecuperacionRepository(), _colaCorreos));
         _filtro = new AutorizacionRolFilter(_sesion);
     }
 
