@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.API.Autorizacion;
+using SistemaDeReservas.API.Workers;
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
@@ -90,6 +92,8 @@ builder.Services.AddScoped<ListadoUsuariosService>();
 builder.Services.AddScoped<RestablecerContrasenaService>();
 builder.Services.AddScoped<RecuperacionContrasenaService>();
 builder.Services.AddScoped<CambioContrasenaPropiaService>();
+builder.Services.AddScoped<ProcesadorColaCorreos>();
+builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
