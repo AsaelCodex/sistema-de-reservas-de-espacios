@@ -73,6 +73,9 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.Property<DateTime>("EmitidoEn")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("Intentos")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("UsadoEn")
                         .HasColumnType("datetime2");
 

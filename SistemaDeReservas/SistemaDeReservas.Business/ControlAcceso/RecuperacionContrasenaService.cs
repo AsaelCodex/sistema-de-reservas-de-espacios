@@ -79,12 +79,21 @@ public class RecuperacionContrasenaService
     }
 
     public async Task<ResultadoCambioContrasena> CambiarContrasenaAsync(
+        string? correo,
         string? codigo,
         string? contrasenaNueva,
         CancellationToken cancellationToken = default)
     {
+        var valorCorreo = correo?.Trim() ?? string.Empty;
         var valorCodigo = codigo?.Trim() ?? string.Empty;
         var contrasena = contrasenaNueva ?? string.Empty;
+
+        if (valorCorreo.Length == 0 || valorCorreo.Length > LongitudMaximaCorreo ||
+            !MailAddress.TryCreate(valorCorreo, out _))
+        {
+            return ResultadoCambioContrasena.DatosInvalidos(
+                $"El correo no tiene un formato válido y no puede exceder {LongitudMaximaCorreo} caracteres.");
+        }
 
         if (valorCodigo.Length != RecuperacionContrasena.TamanioCodigo ||
             !valorCodigo.All(char.IsDigit))
@@ -99,7 +108,14 @@ public class RecuperacionContrasenaService
             return ResultadoCambioContrasena.DatosInvalidos(motivoContraseña);
         }
 
-        var registro = await _codigos.ObtenerPorCodigoAsync(valorCodigo, cancellationToken);
+        var usuario = await _usuarios.ObtenerPorCorreoAsync(
+            valorCorreo.ToLowerInvariant(), cancellationToken);
+        if (usuario is null)
+        {
+            return ResultadoCambioContrasena.CodigoInvalido();
+        }
+
+        var registro = await _codigos.ObtenerPorUsuarioAsync(usuario.Id, cancellationToken);
         if (registro is null)
         {
             return ResultadoCambioContrasena.CodigoInvalido();
@@ -115,10 +131,19 @@ public class RecuperacionContrasenaService
             return ResultadoCambioContrasena.CodigoVencido();
         }
 
-        var usuario = await _usuarios.ObtenerPorIdAsync(registro.UsuarioId, cancellationToken);
-        if (usuario is null)
+        if (registro.Intentos >= RecuperacionContrasena.LimiteIntentos)
         {
-            return ResultadoCambioContrasena.CodigoInvalido();
+            return ResultadoCambioContrasena.CodigoAgotado();
+        }
+
+        if (!string.Equals(registro.Codigo, valorCodigo, StringComparison.Ordinal))
+        {
+            registro.Intentos++;
+            await _codigos.ActualizarAsync(registro, cancellationToken);
+
+            return registro.Intentos >= RecuperacionContrasena.LimiteIntentos
+                ? ResultadoCambioContrasena.CodigoAgotado()
+                : ResultadoCambioContrasena.CodigoInvalido();
         }
 
         usuario.ContraseñaHash = _passwordHasher.Hash(contrasena);

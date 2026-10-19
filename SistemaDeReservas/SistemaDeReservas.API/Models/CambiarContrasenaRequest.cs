@@ -5,6 +5,11 @@ namespace SistemaDeReservas.API.Models;
 public class CambiarContrasenaRequest
 {
     [Required]
+    [EmailAddress]
+    [MaxLength(200)]
+    public string Correo { get; set; } = string.Empty;
+
+    [Required]
     [MaxLength(6)]
     public string Codigo { get; set; } = string.Empty;
 

@@ -6,6 +6,7 @@ public static class RecuperacionContrasena
 {
     public const int VigenciaCodigoMinutos = 30;
     public const int TamanioCodigo = 6;
+    public const int LimiteIntentos = 3;
     public const string AsuntoCorreo = "Recuperación de contraseña";
 
     public static (string Codigo, DateTime EmitidoEn, DateTime VencimientoEn) CrearCodigo()

@@ -25,6 +25,15 @@ public sealed class FakeCodigoRecuperacionRepository : ICodigoRecuperacionReposi
         return Task.FromResult(registro);
     }
 
+    public Task<CodigoRecuperacion?> ObtenerPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default)
+    {
+        var registro = _codigos
+            .Where(c => c.UsuarioId == usuarioId)
+            .OrderByDescending(c => c.EmitidoEn)
+            .FirstOrDefault();
+        return Task.FromResult(registro);
+    }
+
     public Task ActualizarAsync(CodigoRecuperacion codigo, CancellationToken cancellationToken = default)
     {
         var indice = _codigos.FindIndex(c => c.Id == codigo.Id);

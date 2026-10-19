@@ -29,7 +29,9 @@ public class ListadoUsuariosTests
             sesion,
             new CambioEstadoService(_usuarios, _sesiones),
             new ListadoUsuariosService(_usuarios),
-            new RestablecerContrasenaService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones));
+            new RestablecerContrasenaService(
+                _usuarios, new FakeCodigoRecuperacionRepository(),
+                new FakeColaCorreosRepository()));
         _filtro = new AutorizacionRolFilter(sesion);
     }
 

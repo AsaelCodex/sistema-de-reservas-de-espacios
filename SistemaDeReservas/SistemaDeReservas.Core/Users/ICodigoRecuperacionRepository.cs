@@ -6,6 +6,8 @@ public interface ICodigoRecuperacionRepository
 
     Task<CodigoRecuperacion?> ObtenerPorCodigoAsync(string codigo, CancellationToken cancellationToken = default);
 
+    Task<CodigoRecuperacion?> ObtenerPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default);
+
     Task ActualizarAsync(CodigoRecuperacion codigo, CancellationToken cancellationToken = default);
 
     Task EliminarPorUsuarioAsync(Guid usuarioId, CancellationToken cancellationToken = default);

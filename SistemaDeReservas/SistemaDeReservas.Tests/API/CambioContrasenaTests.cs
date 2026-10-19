@@ -136,13 +136,76 @@ public class CambioContrasenaTests
         Assert.True(_hasher.Verificar(ContraseñaAnterior, usuario.ContraseñaHash));
     }
 
-    private async Task<Usuario> CrearUsuarioAsync()
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-10")]
+    public async Task Cambiar_WithCodeOfAnotherUser_ReturnsBadRequest()
+    {
+        var victima = await CrearUsuarioAsync();
+        var atacante = await CrearUsuarioAsync("atacante@itla.edu.do");
+        var codigo = await GenerarCodigoAsync();
+
+        var resultado = await _controller.Cambiar(
+            new CambiarContrasenaRequest
+            {
+                Correo = atacante.Correo,
+                Codigo = codigo,
+                ContrasenaNueva = ContraseñaNueva
+            },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(resultado);
+        Assert.True(_hasher.Verificar(ContraseñaAnterior, victima.ContraseñaHash));
+        Assert.True(_hasher.Verificar(ContraseñaAnterior, atacante.ContraseñaHash));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-10")]
+    public async Task Cambiar_WithUnknownEmail_ReturnsBadRequest()
+    {
+        await CrearUsuarioAsync();
+
+        var resultado = await _controller.Cambiar(
+            new CambiarContrasenaRequest
+            {
+                Correo = "no.registrado@itla.edu.do",
+                Codigo = "123456",
+                ContrasenaNueva = ContraseñaNueva
+            },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(resultado);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-10")]
+    public async Task Cambiar_AfterTooManyFailedAttempts_RejectsEvenTheCorrectCode()
+    {
+        var usuario = await CrearUsuarioAsync();
+        await CrearCodigoAsync(vencido: false);
+
+        for (var intento = 0; intento < RecuperacionContrasena.LimiteIntentos; intento++)
+        {
+            var fallido = await _controller.Cambiar(
+                Solicitud("999999", ContraseñaNueva), CancellationToken.None);
+            Assert.IsType<BadRequestObjectResult>(fallido);
+        }
+
+        var resultado = await _controller.Cambiar(
+            Solicitud("123456", ContraseñaNueva), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(resultado);
+        Assert.Equal(
+            RecuperacionContrasena.LimiteIntentos, Assert.Single(_codigos.Codigos).Intentos);
+        Assert.True(_hasher.Verificar(ContraseñaAnterior, usuario.ContraseñaHash));
+    }
+
+    private async Task<Usuario> CrearUsuarioAsync(string? correo = null)
     {
         var usuario = new Usuario
         {
             Id = Guid.NewGuid(),
             Nombre = "Ana Pérez",
-            Correo = Correo,
+            Correo = correo ?? Correo,
             ContraseñaHash = _hasher.Hash(ContraseñaAnterior),
             Rol = Rol.Estandar,
             Activo = true
@@ -177,5 +240,5 @@ public class CambioContrasenaTests
     }
 
     private static CambiarContrasenaRequest Solicitud(string codigo, string contrasena) =>
-        new() { Codigo = codigo, ContrasenaNueva = contrasena };
+        new() { Correo = Correo, Codigo = codigo, ContrasenaNueva = contrasena };
 }
