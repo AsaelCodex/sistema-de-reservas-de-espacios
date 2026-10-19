@@ -31,7 +31,7 @@ recuperación, cambio y restablecimiento de contraseñas.
 
 - **Verificado:** los 22 requisitos de Control de Acceso (RF-CA-01 a
   RF-CA-22). El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 165, todas en verde. No requieren base de datos ni
+- **Pruebas:** 180, todas en verde. No requieren base de datos ni
   servidor: usan fakes y un hasheador real de prueba.
 - **Endpoints:**
 
@@ -50,10 +50,12 @@ recuperación, cambio y restablecimiento de contraseñas.
 | `PUT /api/usuarios/{id}/rol` | Cambio de rol | Administrador |
 | `PUT /api/usuarios/{id}/estado` | Desactivar/reactivar | Administrador |
 | `PUT /api/usuarios/{id}/contrasena` | Restablecimiento forzado (envía código al correo) | Administrador |
+| `GET /api/correos` | Consulta de la cola de correos (estado, intentos, errores) | Administrador |
 
 - **Pendiente (piezas posteriores):** Gestión de Permisos (RF-GP),
-  Manejador de Documentos (RF-DOC), Notificaciones (RF-NOT, hoy el Core
-  solo encola los correos), Reportes (RF-REP), Auditoría (RF-AUD) y el
+  Manejador de Documentos (RF-DOC), Notificaciones (RF-NOT-01 a
+  RF-NOT-07; la cola de correos RF-NOT-08 a RF-NOT-13 ya está
+  implementada), Reportes (RF-REP), Auditoría (RF-AUD) y el
   módulo de negocio (RF-NEG).
 
 ## Requisitos
@@ -109,14 +111,50 @@ dotnet run --project SistemaDeReservas/SistemaDeReservas.API
 
 La API queda disponible en `http://localhost:5137`.
 
+## Cola de correos
+
+Los correos (activación, recuperación y restablecimiento) se encolan en
+la tabla `CorreosEnCola` y los envía un worker independiente
+(`ColaCorreosWorker`) cada `Correo:IntervaloSegundos` (por defecto 10).
+Cada correo queda registrado con estado (`Pendiente`, `Enviado`,
+`Fallido`), intentos, fechas y último error; se reintenta hasta 3 veces
+y luego se marca `Fallido`. Un correo `Enviado` nunca se vuelve a
+procesar.
+
+Configuración de envío (credenciales **solo** por variables de
+entorno, RD-10 — nunca en el repositorio):
+
+```powershell
+$env:CorreoSmtp__Host = "smtp.ejemplo.com"
+$env:CorreoSmtp__Puerto = "587"
+$env:CorreoSmtp__Usuario = "usuario"
+$env:CorreoSmtp__Password = "clave"
+$env:CorreoSmtp__De = "no-responder@itla.edu.do"
+$env:CorreoSmtp__Ssl = "true"
+```
+
+Si `CorreoSmtp:Host` no está definido, el worker escribe cada correo
+como archivo `.eml` en el directorio `App:DirectorioCorreos`
+(`correo-salida/` en desarrollo), para poder verlos en la demo sin
+servidor de correo.
+
+Comprobar el funcionamiento:
+
+1. Registrar un usuario nuevo (`POST /api/usuarios`).
+2. Verificar que aparece el archivo en `correo-salida/` (o, con SMTP
+   configurado, el correo recibido), dentro de los ~10 segundos.
+3. Consultar `GET /api/correos` como Administrador: el correo aparece
+   con estado `Enviado`, `FechaEnvio` y `Intentos = 0`.
+
 ## Cómo ejecutar las pruebas
 
 ```powershell
 dotnet test SistemaDeReservas/SistemaDeReservas.sln
 ```
 
-Resultado esperado: **165/165** en verde. Cada prueba declara el
-requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]`.
+Resultado esperado: **180/180** en verde. Cada prueba declara el
+requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]` o
+`[Trait("Requerimiento", "RF-NOT-XX")]`.
 Las pruebas no necesitan base de datos ni servidor.
 
 ## Documentación
