@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
 
 namespace SistemaDeReservas.Infrastructure.Data;
@@ -13,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<CorreoEnCola> CorreosEnCola { get; set; }
     public DbSet<Sesion> Sesiones { get; set; }
     public DbSet<CodigoRecuperacion> CodigosRecuperacion { get; set; }
+    public DbSet<Reserva> Reservas { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,5 +31,12 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<CodigoRecuperacion>()
             .HasIndex(c => c.Codigo)
             .IsUnique();
+        modelBuilder.Entity<Reserva>(reserva =>
+        {
+            reserva.Property(r => r.Espacio).HasMaxLength(200);
+            reserva.HasOne(r => r.Usuario)
+                .WithMany()
+                .HasForeignKey(r => r.UsuarioId);
+        });
     }
 }
