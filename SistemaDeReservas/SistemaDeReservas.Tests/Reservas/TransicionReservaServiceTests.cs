@@ -28,6 +28,24 @@ public class TransicionReservaServiceTests
         Assert.Equal(EstadoReserva.Confirmada, (await _reservas.ObtenerPorIdAsync(reserva.Id))!.Estado);
     }
 
+    [Theory]
+    [InlineData(EstadoReserva.Solicitada, EstadoReserva.Rechazada)]
+    [InlineData(EstadoReserva.Solicitada, EstadoReserva.Cancelada)]
+    [InlineData(EstadoReserva.Confirmada, EstadoReserva.Finalizada)]
+    [InlineData(EstadoReserva.Confirmada, EstadoReserva.Cancelada)]
+    [Trait("Requerimiento", "RF-NEG-03")]
+    public async Task Transicionar_WithAllowedTransition_ChangesState(
+        EstadoReserva origen, EstadoReserva destino)
+    {
+        var reserva = await CrearReservaAsync(origen);
+
+        var resultado = await _servicio.TransicionarAsync(reserva.Id, destino);
+
+        Assert.Equal(EstadoTransicion.Transicionada, resultado.Estado);
+        Assert.Equal(destino, reserva.Estado);
+        Assert.Equal(destino, (await _reservas.ObtenerPorIdAsync(reserva.Id))!.Estado);
+    }
+
     [Fact]
     [Trait("Requerimiento", "RF-NEG-03")]
     public void EstadoReserva_DeclaresBetweenThreeAndFiveStates()

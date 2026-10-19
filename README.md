@@ -36,7 +36,7 @@ módulo de reservas.
   RF-CA-22) y la máquina de estados del negocio (RF-NEG-03, RF-NEG-04,
   RF-NEG-05 y RF-NEG-09). El detalle y la evidencia están en
   `docs/matriz-requisitos.md`.
-- **Pruebas:** 187, todas en verde. No requieren base de datos ni
+- **Pruebas:** 191, todas en verde. No requieren base de datos ni
   servidor: usan fakes y un hasheador real de prueba.
 - **Endpoints:**
 
@@ -157,7 +157,7 @@ Comprobar el funcionamiento:
 dotnet test SistemaDeReservas/SistemaDeReservas.sln
 ```
 
-Resultado esperado: **187/187** en verde. Cada prueba declara el
+Resultado esperado: **191/191** en verde. Cada prueba declara el
 requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]`,
 `[Trait("Requerimiento", "RF-NOT-XX")]` o
 `[Trait("Requerimiento", "RF-NEG-XX")]`.
