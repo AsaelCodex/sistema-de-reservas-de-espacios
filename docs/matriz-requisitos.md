@@ -67,6 +67,24 @@
 | RF-NEG-09 | Máquina de estados independiente de permisos.     | S4/S8    | Pendiente | —         |
 | RF-NEG-10 | Adjuntos opcionales; si se usan, cumplen Pieza 3. | S9       | Pendiente | —         |
 
+## Notificaciones y cola de correos
+
+| ID        | Requisito                                         | Etapa    | Estado    | Evidencia |
+| --------- | ------------------------------------------------- | -------- | --------- | --------- |
+| RF-NOT-01 | Crear una solicitud de permiso notifica a los Administradores. | S11-S12 | Pendiente | —         |
+| RF-NOT-02 | Resolver una solicitud de permiso notifica al solicitante. | S11-S12 | Pendiente | —         |
+| RF-NOT-03 | Al menos un evento propio del módulo de negocio dispara una notificación. | S11-S12 | Pendiente | —         |
+| RF-NOT-04 | Consultar las notificaciones propias, distinguiendo leídas de no leídas. | S11-S12 | Pendiente | —         |
+| RF-NOT-05 | Marcar una notificación como leída.               | S11-S12 | Pendiente | —         |
+| RF-NOT-06 | Toda notificación se entrega por dos canales.     | S11-S12 | Pendiente | —         |
+| RF-NOT-07 | El destinatario puede desactivar el canal de correo sin perder el canal interno. | S11-S12 | Pendiente | —         |
+| RF-NOT-08 | Los correos se encolan en la operación que los origina. | S11-S12 | Verificado | Los 4 servicios de Control de Acceso encolan con `IColaCorreosRepository.EncolarAsync` (estado `Pendiente`) sin enviar; tests `RegisterUser_EnqueuesActivationEmailInsteadOfSendingIt` y `Post_WithRegisteredEmail_GeneratesCodeAndEnqueuesEmail` (SistemaDeReservas.Tests) |
+| RF-NOT-09 | Un proceso independiente toma los pendientes y los envía. | S11-S12 | Verificado | `ColaCorreosWorker` (`BackgroundService`, intervalo `Correo:IntervaloSegundos`) + `ProcesadorColaCorreos` + puerto `IEnvioCorreo` (`SmtpEnvioCorreo` o `ArchivoEnvioCorreo` de respaldo); tests `Procesar_SendsPendingEmailsAndMarksThemSent`, `ProcesarAsync_SendsQueuedEmailsWithoutRerunningTheOriginatingFlow` y `Enviar_WritesProcessedMessageToOutputDirectory` (SistemaDeReservas.Tests) |
+| RF-NOT-10 | Reintentos limitados y luego marcado como fallido. | S11-S12 | Verificado | `ProcesadorColaCorreos.LimiteIntentos = 3`: en cada fallo `Intentos++` y `UltimoError`; al límite `Estado = Fallido` sin reintentos posteriores; tests `Procesar_WhenSendFails_IncrementsAttemptsAndKeepsPending` y `Procesar_WhenAttemptsReachLimit_MarksFailedAndStopsRetrying` (SistemaDeReservas.Tests) |
+| RF-NOT-11 | Estado, intentos, fechas y último error consultables por un Administrador. | S11-S12 | Verificado | Entidad `CorreoEnCola` + endpoint `GET /api/correos` con `RequiereRol(Administrador)` + `ListadoCorreosService`; tests `Get_ReturnsQueueWithStatesAttemptsAndErrors`, `Get_WithoutSession_ReturnsUnauthorized` y `Get_AsEstandarUser_IsRejectedByServer` (SistemaDeReservas.Tests) |
+| RF-NOT-12 | Un correo enviado no se vuelve a enviar.          | S11-S12 | Verificado | El procesador solo toma `Estado = Pendiente` y lo marca `Enviado` con `FechaEnvio`; test `Procesar_Twice_DoesNotSendTheSameEmailAgain` (SistemaDeReservas.Tests) |
+| RF-NOT-13 | Credenciales del servidor de correo por variables de entorno. | S11-S12 | Verificado | `Program.cs` lee `CorreoSmtp:Host/Puerto/Usuario/Password/De/Ssl` (en producción, env vars `CorreoSmtp__*`); sin secretos en el repositorio (RD-10) |
+
 ## Evidencia
 
 Cuando un requisito sea verificado, registrar algo concreto:
