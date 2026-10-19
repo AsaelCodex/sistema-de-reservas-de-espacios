@@ -58,13 +58,13 @@
 | --------- | ------------------------------------------------- | -------- | --------- | --------- |
 | RF-NEG-01 | Al menos cuatro entidades relacionadas.           | S4-S8    | Pendiente | —         |
 | RF-NEG-02 | Al menos cinco funcionalidades separables.        | S4-S8    | Pendiente | —         |
-| RF-NEG-03 | Máquina de estados propia de 3-5 estados.         | S4/S8    | Pendiente | —         |
-| RF-NEG-04 | Al menos una transición prohibida.                | S4/S8    | Pendiente | —         |
-| RF-NEG-05 | Al menos un estado terminal.                      | S4/S8    | Pendiente | —         |
+| RF-NEG-03 | Máquina de estados propia de 3-5 estados.         | S4/S8    | Verificado | `EstadoReserva` (5 estados) y la tabla de transiciones `TransicionesReserva` en un solo lugar (`Core/Reservations`) + `TransicionReservaService`; tests `EstadoReserva_DeclaresBetweenThreeAndFiveStates` y `Transicionar_FromSolicitadaToConfirmada_ChangesState` (SistemaDeReservas.Tests); tabla en `docs/maquina-estados-negocio.md` |
+| RF-NEG-04 | Al menos una transición prohibida.                | S4/S8    | Verificado | Toda combinación no listada en `TransicionesReserva.EsValida` se rechaza sin cambiar el estado; tests `Transicionar_FromSolicitadaToFinalizada_IsRejectedAndKeepsState` y `Transicionar_FromRechazadaToConfirmada_IsRejected` (SistemaDeReservas.Tests) |
+| RF-NEG-05 | Al menos un estado terminal.                      | S4/S8    | Verificado | `Rechazada`, `Cancelada` y `Finalizada` sin transiciones de salida (`TransicionesReserva.EsTerminal`); tests `TerminalStates_HaveNoOutgoingTransitions` y `Transicionar_FromFinalizada_IsRejected` (SistemaDeReservas.Tests) |
 | RF-NEG-06 | Operaciones protegidas por Control de Acceso.     | Desde S4 | Pendiente | —         |
 | RF-NEG-07 | Al menos una notificación propia del dominio.     | S11-S12  | Pendiente | —         |
 | RF-NEG-08 | Al menos un reporte agregado del dominio.         | S12      | Pendiente | —         |
-| RF-NEG-09 | Máquina de estados independiente de permisos.     | S4/S8    | Pendiente | —         |
+| RF-NEG-09 | Máquina de estados independiente de permisos.     | S4/S8    | Verificado | Máquina en `Core/Reservations` + `Business/Reservas`, sin dependencias con Gestión de permisos (Pieza 2 sin implementar): la estructura está descrita en `docs/maquina-estados-negocio.md` |
 | RF-NEG-10 | Adjuntos opcionales; si se usan, cumplen Pieza 3. | S9       | Pendiente | —         |
 
 ## Notificaciones y cola de correos

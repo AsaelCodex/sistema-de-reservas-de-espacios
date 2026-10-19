@@ -15,7 +15,10 @@ verificado (RF-CA-01 a RF-CA-22): registro con correo único,
 contraseñas almacenadas con hash, inicio y cierre de sesión, roles
 Administrador y Estándar, autorización verificada del lado del servidor,
 activación de cuenta por enlace, bloqueo por intentos fallidos, y
-recuperación, cambio y restablecimiento de contraseñas.
+recuperación, cambio y restablecimiento de contraseñas. También está
+implementada la **máquina de estados del negocio** (`Reserva`,
+RF-NEG-03 a RF-NEG-05 y RF-NEG-09) sobre la que se construirá el
+módulo de reservas.
 
 ## Arquitectura
 
@@ -30,8 +33,10 @@ recuperación, cambio y restablecimiento de contraseñas.
 ## Estado actual
 
 - **Verificado:** los 22 requisitos de Control de Acceso (RF-CA-01 a
-  RF-CA-22). El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 180, todas en verde. No requieren base de datos ni
+  RF-CA-22) y la máquina de estados del negocio (RF-NEG-03, RF-NEG-04,
+  RF-NEG-05 y RF-NEG-09). El detalle y la evidencia están en
+  `docs/matriz-requisitos.md`.
+- **Pruebas:** 191, todas en verde. No requieren base de datos ni
   servidor: usan fakes y un hasheador real de prueba.
 - **Endpoints:**
 
@@ -55,8 +60,8 @@ recuperación, cambio y restablecimiento de contraseñas.
 - **Pendiente (piezas posteriores):** Gestión de Permisos (RF-GP),
   Manejador de Documentos (RF-DOC), Notificaciones (RF-NOT-01 a
   RF-NOT-07; la cola de correos RF-NOT-08 a RF-NOT-13 ya está
-  implementada), Reportes (RF-REP), Auditoría (RF-AUD) y el
-  módulo de negocio (RF-NEG).
+  implementada), Reportes (RF-REP), Auditoría (RF-AUD) y el resto del
+  módulo de negocio (RF-NEG, salvo su máquina de estados).
 
 ## Requisitos
 
@@ -152,9 +157,10 @@ Comprobar el funcionamiento:
 dotnet test SistemaDeReservas/SistemaDeReservas.sln
 ```
 
-Resultado esperado: **180/180** en verde. Cada prueba declara el
-requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]` o
-`[Trait("Requerimiento", "RF-NOT-XX")]`.
+Resultado esperado: **191/191** en verde. Cada prueba declara el
+requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]`,
+`[Trait("Requerimiento", "RF-NOT-XX")]` o
+`[Trait("Requerimiento", "RF-NEG-XX")]`.
 Las pruebas no necesitan base de datos ni servidor.
 
 ## Documentación
@@ -162,6 +168,8 @@ Las pruebas no necesitan base de datos ni servidor.
 - `docs/requerimientos-core.md`: requisitos oficiales del Core con sus
   identificadores (RD-XX, RF-CA-XX, RF-NOT-XX, etc.).
 - `docs/matriz-requisitos.md`: estado de cada requisito y su evidencia.
+- `docs/maquina-estados-negocio.md`: estados y transiciones de la
+  reserva (RF-NEG-03 a RF-NEG-05).
 - `docs/bitacora-asignación-1.md`: bitácora del proyecto.
 - `AGENTS.md`: convenciones del proyecto (estructura, seguridad,
   commits y pull requests).
