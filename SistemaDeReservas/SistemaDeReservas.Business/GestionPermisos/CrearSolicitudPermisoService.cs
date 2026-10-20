@@ -5,10 +5,14 @@ namespace SistemaDeReservas.Business.GestionPermisos;
 public class CrearSolicitudPermisoService
 {
     private readonly ISolicitudPermisoRepository _solicitudes;
+    private readonly IPermisoOtorgadoRepository _permisosOtorgados;
 
-    public CrearSolicitudPermisoService(ISolicitudPermisoRepository solicitudes)
+    public CrearSolicitudPermisoService(
+        ISolicitudPermisoRepository solicitudes,
+        IPermisoOtorgadoRepository permisosOtorgados)
     {
         _solicitudes = solicitudes;
+        _permisosOtorgados = permisosOtorgados;
     }
 
     public async Task<ResultadoCreacionSolicitud> CrearAsync(
@@ -27,6 +31,14 @@ public class CrearSolicitudPermisoService
                 solicitanteId, permisoValor.Value, cancellationToken))
         {
             return ResultadoCreacionSolicitud.SolicitudPendienteExistente(permisoValor.Value);
+        }
+
+        // D-GP-05(b): no se solicita un permiso ya concedido explícitamente.
+        // Los permisos implícitos del Administrador (D-GP-07) no bloquean.
+        if (await _permisosOtorgados.ExisteAsync(
+                solicitanteId, permisoValor.Value, cancellationToken))
+        {
+            return ResultadoCreacionSolicitud.PermisoYaOtorgado(permisoValor.Value);
         }
 
         var solicitud = new SolicitudPermiso

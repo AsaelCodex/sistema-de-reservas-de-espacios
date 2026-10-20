@@ -29,7 +29,7 @@ public class SolicitudesPermisosTests
     {
         var sesion = new SesionService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones);
         _controller = new SolicitudesPermisosController(
-            new CrearSolicitudPermisoService(_solicitudes),
+            new CrearSolicitudPermisoService(_solicitudes, new FakePermisoOtorgadoRepository()),
             sesion,
             new ListadoSolicitudesService(_solicitudes));
         _filtro = new AutorizacionRolFilter(sesion);

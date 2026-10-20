@@ -7,11 +7,12 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 public class CrearSolicitudPermisoServiceTests
 {
     private readonly FakeSolicitudPermisoRepository _solicitudes = new();
+    private readonly FakePermisoOtorgadoRepository _permisosOtorgados = new();
     private readonly CrearSolicitudPermisoService _servicio;
 
     public CrearSolicitudPermisoServiceTests()
     {
-        _servicio = new CrearSolicitudPermisoService(_solicitudes);
+        _servicio = new CrearSolicitudPermisoService(_solicitudes, _permisosOtorgados);
     }
 
     [Fact]
@@ -89,5 +90,42 @@ public class CrearSolicitudPermisoServiceTests
 
         Assert.Equal(EstadoCreacionSolicitud.Creada, resultado.Estado);
         Assert.Equal(2, _solicitudes.Solicitudes.Count);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "D-GP-05")]
+    public async Task Crear_WithPermissionAlreadyGranted_ReturnsPermisoYaOtorgado()
+    {
+        var solicitante = Guid.NewGuid();
+        await OtorgarAsync(solicitante);
+
+        var resultado = await _servicio.CrearAsync(solicitante, "CrearReserva");
+
+        Assert.Equal(EstadoCreacionSolicitud.PermisoYaOtorgado, resultado.Estado);
+        Assert.Empty(_solicitudes.Solicitudes);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "D-GP-05")]
+    public async Task Crear_WithPermissionGrantedToAnotherUser_IsAllowed()
+    {
+        await OtorgarAsync(Guid.NewGuid());
+
+        var resultado = await _servicio.CrearAsync(Guid.NewGuid(), "CrearReserva");
+
+        Assert.Equal(EstadoCreacionSolicitud.Creada, resultado.Estado);
+        Assert.Single(_solicitudes.Solicitudes);
+    }
+
+    private async Task OtorgarAsync(Guid usuarioId)
+    {
+        await _permisosOtorgados.AgregarAsync(new PermisoOtorgado
+        {
+            Id = Guid.NewGuid(),
+            UsuarioId = usuarioId,
+            Permiso = Permiso.CrearReserva,
+            SolicitudPermisoId = Guid.NewGuid(),
+            OtorgadoEn = DateTime.UtcNow
+        });
     }
 }

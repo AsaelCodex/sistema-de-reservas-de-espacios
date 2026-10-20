@@ -6,7 +6,8 @@ public enum EstadoCreacionSolicitud
 {
     Creada,
     DatosInvalidos,
-    SolicitudPendienteExistente
+    SolicitudPendienteExistente,
+    PermisoYaOtorgado
 }
 
 public sealed record ResultadoCreacionSolicitud(
@@ -24,5 +25,11 @@ public sealed record ResultadoCreacionSolicitud(
         new(
             EstadoCreacionSolicitud.SolicitudPendienteExistente,
             $"Ya existe una solicitud pendiente para el permiso {permiso}.",
+            null);
+
+    public static ResultadoCreacionSolicitud PermisoYaOtorgado(Permiso permiso) =>
+        new(
+            EstadoCreacionSolicitud.PermisoYaOtorgado,
+            $"El permiso {permiso} ya está otorgado a este usuario.",
             null);
 }
