@@ -1,6 +1,10 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
 using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Controllers;
 using SistemaDeReservas.API.Models;
@@ -19,13 +23,16 @@ public class SolicitudesPermisosTests
     private readonly FakeSesionRepository _sesiones = new();
     private readonly FakeSolicitudPermisoRepository _solicitudes = new();
     private readonly SolicitudesPermisosController _controller;
+    private readonly AutorizacionRolFilter _filtro;
 
     public SolicitudesPermisosTests()
     {
         var sesion = new SesionService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones);
         _controller = new SolicitudesPermisosController(
             new CrearSolicitudPermisoService(_solicitudes),
-            sesion);
+            sesion,
+            new ListadoSolicitudesService(_solicitudes));
+        _filtro = new AutorizacionRolFilter(sesion);
     }
 
     [Fact]
@@ -129,6 +136,146 @@ public class SolicitudesPermisosTests
         var nivel = DeclaracionOperaciones.ObtenerNivel(operacion);
 
         Assert.Equal(NivelOperacion.Autenticado, nivel);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-02")]
+    public async Task GetPendientes_AsAdministrator_ReturnsOnlyPendingRequests()
+    {
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var token = await AbrirSesionAsync(administrador);
+        await AgregarSolicitudAsync(Guid.NewGuid(), EstadoSolicitudPermiso.Pendiente);
+        await AgregarSolicitudAsync(Guid.NewGuid(), EstadoSolicitudPermiso.Rechazada);
+        var contexto = Contexto(
+            $"Bearer {token}",
+            Accion(nameof(SolicitudesPermisosController.GetPendientes)));
+
+        await _filtro.OnAuthorizationAsync(contexto);
+        Assert.Null(contexto.Result);
+
+        var resultado = await _controller.GetPendientes(CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
+        var cuerpo = JsonSerializer.Serialize(respuesta.Value);
+        Assert.Contains("Pendiente", cuerpo);
+        Assert.DoesNotContain("Rechazada", cuerpo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-06")]
+    public async Task GetPendientes_AsEstandarUser_IsRejectedByServer()
+    {
+        var estandar = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(estandar);
+        var contexto = Contexto(
+            $"Bearer {token}",
+            Accion(nameof(SolicitudesPermisosController.GetPendientes)));
+
+        await _filtro.OnAuthorizationAsync(contexto);
+
+        var respuesta = Assert.IsType<ObjectResult>(contexto.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, respuesta.StatusCode);
+        Assert.Contains("Administrador", JsonSerializer.Serialize(respuesta.Value));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-06")]
+    public async Task GetPendientes_WithoutSession_ReturnsUnauthorized()
+    {
+        var contexto = Contexto(
+            null,
+            Accion(nameof(SolicitudesPermisosController.GetPendientes)));
+
+        await _filtro.OnAuthorizationAsync(contexto);
+
+        var respuesta = Assert.IsType<ObjectResult>(contexto.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, respuesta.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-05")]
+    public void GetPendientes_DeclaresAdministradorLevel()
+    {
+        var nivel = DeclaracionOperaciones.ObtenerNivel(
+            Accion(nameof(SolicitudesPermisosController.GetPendientes)));
+
+        Assert.Equal(NivelOperacion.Administrador, nivel);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-02")]
+    public async Task GetMias_AsEstandarUser_ReturnsOnlyOwnRequests()
+    {
+        var estandar = await CrearUsuarioAsync(Rol.Estandar);
+        var otro = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(estandar);
+        await AgregarSolicitudAsync(estandar.Id, EstadoSolicitudPermiso.Pendiente);
+        await AgregarSolicitudAsync(otro.Id, EstadoSolicitudPermiso.Pendiente);
+
+        var resultado = await _controller.GetMias($"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
+        var cuerpo = JsonSerializer.Serialize(respuesta.Value);
+        Assert.Contains(estandar.Id.ToString(), cuerpo);
+        Assert.DoesNotContain(otro.Id.ToString(), cuerpo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-06")]
+    public async Task GetMias_WithoutSession_ReturnsUnauthorized()
+    {
+        var resultado = await _controller.GetMias(null, CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status401Unauthorized, respuesta.StatusCode);
+        Assert.Empty(_solicitudes.Solicitudes);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-05")]
+    public void GetMias_DeclaresAutenticadoLevel()
+    {
+        var nivel = DeclaracionOperaciones.ObtenerNivel(
+            Accion(nameof(SolicitudesPermisosController.GetMias)));
+
+        Assert.Equal(NivelOperacion.Autenticado, nivel);
+    }
+
+    private async Task<SolicitudPermiso> AgregarSolicitudAsync(
+        Guid solicitante,
+        EstadoSolicitudPermiso estado)
+    {
+        var solicitud = new SolicitudPermiso
+        {
+            Id = Guid.NewGuid(),
+            SolicitanteId = solicitante,
+            Permiso = Permiso.CrearReserva,
+            Estado = estado,
+            CreadaEn = DateTime.UtcNow
+        };
+        await _solicitudes.AgregarAsync(solicitud);
+        return solicitud;
+    }
+
+    private static MethodInfo Accion(string nombre) =>
+        typeof(SolicitudesPermisosController).GetMethod(nombre)!;
+
+    private static AuthorizationFilterContext Contexto(string? autorizacion, MethodInfo accion)
+    {
+        var httpContext = new DefaultHttpContext();
+        if (autorizacion is not null)
+        {
+            httpContext.Request.Headers["Authorization"] = autorizacion;
+        }
+
+        var descriptor = new ActionContext(
+            httpContext,
+            new RouteData(),
+            new ControllerActionDescriptor { MethodInfo = accion });
+
+        return new AuthorizationFilterContext(descriptor, new List<IFilterMetadata>());
     }
 
     private async Task<Usuario> CrearUsuarioAsync(Rol rol)
