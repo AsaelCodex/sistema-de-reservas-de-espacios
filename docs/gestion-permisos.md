@@ -136,7 +136,7 @@ respuestas controladas (RD-07, RD-08).
 | Capa | Archivos |
 |---|---|
 | Core (`Core/Permissions/`) | `Permiso.cs`, `EstadoSolicitudPermiso.cs`, `SolicitudPermiso.cs`, `PermisoOtorgado.cs`, `TransicionesSolicitudPermiso.cs`, `ISolicitudPermisoRepository.cs`, `IPermisoOtorgadoRepository.cs` |
-| Business (`Business/GestionPermisos/`) | `CrearSolicitudPermisoService.cs` + resultado, `ListadoSolicitudesService.cs`, `ResolucionSolicitudService.cs` + resultado, `AutorizacionPermisosService.cs` |
+| Business (`Business/GestionPermisos/`) | `CrearSolicitudPermisoService.cs` + resultado, `ListadoSolicitudesService.cs`, `TransicionSolicitudPermisoService.cs` + resultado, `ResolucionSolicitudService.cs` + resultado, `AutorizacionPermisosService.cs` |
 | Infrastructure | `SolicitudPermisoRepository.cs`, `PermisoOtorgadoRepository.cs`, `DbSet` en `AppDbContext`, migración `AddSolicitudesPermisos`, seeder de administradores |
 | API | `SolicitudesPermisosController.cs`, `Models/CrearSolicitudPermisoRequest.cs`, `Models/RechazarSolicitudPermisoRequest.cs`, registros de DI en `Program.cs` |
 | Tests | `Fakes/FakeSolicitudPermisoRepository.cs`, `Fakes/FakePermisoOtorgadoRepository.cs`, carpeta `GestionPermisos/` y `API/SolicitudesPermisosTests.cs` |
@@ -150,7 +150,7 @@ respuestas controladas (RD-07, RD-08).
 | RF-GP-03 | D-GP-06 | `TransicionSolicitudTests` (registra aprobador y fecha) |
 | RF-GP-04 | D-GP-06 | `TransicionSolicitudTests` (sin motivo no se completa) |
 | RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4) |
-| RF-GP-06 | D-GP-06 | `TransicionSolicitudTests` (aprobación doble, `Rechazada → Aplicada`) |
+| RF-GP-06 | D-GP-06 | `TransicionesSolicitudPermisoTests` (tabla) y `TransicionSolicitudPermisoServiceTests` (las 16 combinaciones, aprobación doble y `Rechazada → Aplicada` rechazadas sin cambiar el estado) |
 | RF-GP-07 | D-GP-05(b), D-GP-08 | `ResolucionPropiaTests` + prueba de API con los dos administradores |
 
 ## 9. Fuera de alcance y puntos señalados

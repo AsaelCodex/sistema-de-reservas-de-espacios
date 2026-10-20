@@ -61,7 +61,7 @@
 | RF-GP-03 | Un Administrador aprueba una solicitud pendiente.                                | S6-S8 | Pendiente | —         |
 | RF-GP-04 | Un Administrador rechaza una solicitud pendiente indicando el motivo.            | S6-S8 | Pendiente | —         |
 | RF-GP-05 | Al aprobar, el sistema aplica el cambio de permiso automáticamente.              | S6-S8 | Pendiente | —         |
-| RF-GP-06 | Solo se permiten las transiciones de la tabla de transiciones.                   | S6-S8 | Pendiente | —         |
+| RF-GP-06 | Solo se permiten las transiciones de la tabla de transiciones.                   | S6-S8 | Verificado | Componentes `TransicionesSolicitudPermiso` (tabla oficial en Core) y `TransicionSolicitudPermisoService`; tests `TransicionesSolicitudPermisoTests` y `TransicionSolicitudPermisoServiceTests` (SistemaDeReservas.Tests): las 16 combinaciones de estados se prueban; las 13 prohibidas —incluidas `Rechazada → Aplicada` y `Aplicada → Aprobada` (aprobar dos veces)— se rechazan y el estado persistido no cambia |
 | RF-GP-07 | Nadie resuelve su propia solicitud.                                              | S6-S8 | Pendiente | —         |
 
 Las decisiones de diseño de esta pieza (catálogo de permisos, duplicados,
