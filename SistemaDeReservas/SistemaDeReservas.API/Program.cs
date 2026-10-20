@@ -46,6 +46,7 @@ builder.Services.AddScoped<ISesionRepository, SesionRepository>();
 builder.Services.AddScoped<ICodigoRecuperacionRepository, CodigoRecuperacionRepository>();
 builder.Services.AddScoped<IReservaRepository, ReservaRepository>();
 builder.Services.AddScoped<ISolicitudPermisoRepository, SolicitudPermisoRepository>();
+builder.Services.AddScoped<IPermisoOtorgadoRepository, PermisoOtorgadoRepository>();
 builder.Services.AddSingleton<IEnvioCorreo>(sp =>
 {
     var smtpHost = builder.Configuration["CorreoSmtp:Host"];

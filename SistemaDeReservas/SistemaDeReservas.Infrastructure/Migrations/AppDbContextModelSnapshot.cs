@@ -60,6 +60,34 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.ToTable("CorreosEnCola");
                 });
 
+            modelBuilder.Entity("SistemaDeReservas.Core.Permissions.PermisoOtorgado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("OtorgadoEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Permiso")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("SolicitudPermisoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SolicitudPermisoId");
+
+                    b.HasIndex("UsuarioId", "Permiso")
+                        .IsUnique();
+
+                    b.ToTable("PermisosOtorgados");
+                });
+
             modelBuilder.Entity("SistemaDeReservas.Core.Permissions.SolicitudPermiso", b =>
                 {
                     b.Property<Guid>("Id")
@@ -264,6 +292,25 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("SistemaDeReservas.Core.Permissions.PermisoOtorgado", b =>
+                {
+                    b.HasOne("SistemaDeReservas.Core.Permissions.SolicitudPermiso", "SolicitudPermiso")
+                        .WithMany()
+                        .HasForeignKey("SolicitudPermisoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SistemaDeReservas.Core.Users.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SolicitudPermiso");
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("SistemaDeReservas.Core.Permissions.SolicitudPermiso", b =>

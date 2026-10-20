@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<CodigoRecuperacion> CodigosRecuperacion { get; set; }
     public DbSet<Reserva> Reservas { get; set; }
     public DbSet<SolicitudPermiso> SolicitudesPermiso { get; set; }
+    public DbSet<PermisoOtorgado> PermisosOtorgados { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +49,18 @@ public class AppDbContext : DbContext
             solicitud.HasIndex(s => new { s.SolicitanteId, s.Permiso })
                 .IsUnique()
                 .HasFilter("[Estado] = 0");
+        });
+        modelBuilder.Entity<PermisoOtorgado>(otorgado =>
+        {
+            // D-GP-02: las claves foráneas se crean desde la tabla nueva.
+            otorgado.HasOne(o => o.Usuario)
+                .WithMany()
+                .HasForeignKey(o => o.UsuarioId);
+            otorgado.HasOne(o => o.SolicitudPermiso)
+                .WithMany()
+                .HasForeignKey(o => o.SolicitudPermisoId);
+            otorgado.HasIndex(o => new { o.UsuarioId, o.Permiso })
+                .IsUnique();
         });
     }
 }
