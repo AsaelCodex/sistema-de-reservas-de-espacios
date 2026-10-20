@@ -5,6 +5,7 @@ using SistemaDeReservas.API.Workers;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
@@ -43,6 +44,7 @@ builder.Services.AddScoped<IColaCorreosRepository, ColaCorreosRepository>();
 builder.Services.AddScoped<ISesionRepository, SesionRepository>();
 builder.Services.AddScoped<ICodigoRecuperacionRepository, CodigoRecuperacionRepository>();
 builder.Services.AddScoped<IReservaRepository, ReservaRepository>();
+builder.Services.AddScoped<ISolicitudPermisoRepository, SolicitudPermisoRepository>();
 builder.Services.AddSingleton<IEnvioCorreo>(sp =>
 {
     var smtpHost = builder.Configuration["CorreoSmtp:Host"];

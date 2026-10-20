@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
 
@@ -15,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<Sesion> Sesiones { get; set; }
     public DbSet<CodigoRecuperacion> CodigosRecuperacion { get; set; }
     public DbSet<Reserva> Reservas { get; set; }
+    public DbSet<SolicitudPermiso> SolicitudesPermiso { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,6 +39,15 @@ public class AppDbContext : DbContext
             reserva.HasOne(r => r.Usuario)
                 .WithMany()
                 .HasForeignKey(r => r.UsuarioId);
+        });
+        modelBuilder.Entity<SolicitudPermiso>(solicitud =>
+        {
+            solicitud.HasOne(s => s.Solicitante)
+                .WithMany()
+                .HasForeignKey(s => s.SolicitanteId);
+            solicitud.HasIndex(s => new { s.SolicitanteId, s.Permiso })
+                .IsUnique()
+                .HasFilter("[Estado] = 0");
         });
     }
 }
