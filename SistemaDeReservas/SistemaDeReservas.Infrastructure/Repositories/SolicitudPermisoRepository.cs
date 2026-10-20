@@ -51,4 +51,20 @@ public class SolicitudPermisoRepository : ISolicitudPermisoRepository
             .OrderByDescending(s => s.CreadaEn)
             .ToListAsync(cancellationToken);
     }
+
+    public Task<SolicitudPermiso?> ObtenerPorIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        return _context.SolicitudesPermiso
+            .FirstOrDefaultAsync(solicitud => solicitud.Id == id, cancellationToken);
+    }
+
+    public async Task ActualizarAsync(
+        SolicitudPermiso solicitud,
+        CancellationToken cancellationToken = default)
+    {
+        _context.SolicitudesPermiso.Update(solicitud);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 }

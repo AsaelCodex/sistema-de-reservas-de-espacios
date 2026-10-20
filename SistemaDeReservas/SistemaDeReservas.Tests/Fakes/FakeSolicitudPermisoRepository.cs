@@ -46,4 +46,24 @@ public sealed class FakeSolicitudPermisoRepository : ISolicitudPermisoRepository
             .ToList();
         return Task.FromResult(resultado);
     }
+
+    public Task<SolicitudPermiso?> ObtenerPorIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var solicitud = _solicitudes.FirstOrDefault(s => s.Id == id);
+        return Task.FromResult(solicitud);
+    }
+
+    public Task ActualizarAsync(SolicitudPermiso solicitud, CancellationToken cancellationToken = default)
+    {
+        var indice = _solicitudes.FindIndex(s => s.Id == solicitud.Id);
+        if (indice < 0)
+        {
+            throw new InvalidOperationException("La solicitud no existe.");
+        }
+
+        _solicitudes[indice] = solicitud;
+        return Task.CompletedTask;
+    }
 }
