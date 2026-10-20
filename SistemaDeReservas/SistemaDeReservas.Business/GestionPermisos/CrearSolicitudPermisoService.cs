@@ -23,6 +23,12 @@ public class CrearSolicitudPermisoService
                 "El permiso indicado no existe. Los permisos válidos son: CrearReserva.");
         }
 
+        if (await _solicitudes.ExistePendienteAsync(
+                solicitanteId, permisoValor.Value, cancellationToken))
+        {
+            return ResultadoCreacionSolicitud.SolicitudPendienteExistente(permisoValor.Value);
+        }
+
         var solicitud = new SolicitudPermiso
         {
             Id = Guid.NewGuid(),

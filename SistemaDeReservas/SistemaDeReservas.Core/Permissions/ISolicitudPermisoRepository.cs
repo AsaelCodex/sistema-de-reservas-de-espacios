@@ -3,4 +3,9 @@ namespace SistemaDeReservas.Core.Permissions;
 public interface ISolicitudPermisoRepository
 {
     Task AgregarAsync(SolicitudPermiso solicitud, CancellationToken cancellationToken = default);
+
+    Task<bool> ExistePendienteAsync(
+        Guid solicitanteId,
+        Permiso permiso,
+        CancellationToken cancellationToken = default);
 }

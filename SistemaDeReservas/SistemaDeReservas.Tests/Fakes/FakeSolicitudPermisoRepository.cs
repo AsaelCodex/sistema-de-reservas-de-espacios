@@ -13,4 +13,16 @@ public sealed class FakeSolicitudPermisoRepository : ISolicitudPermisoRepository
         _solicitudes.Add(solicitud);
         return Task.CompletedTask;
     }
+
+    public Task<bool> ExistePendienteAsync(
+        Guid solicitanteId,
+        Permiso permiso,
+        CancellationToken cancellationToken = default)
+    {
+        var existe = _solicitudes.Any(s =>
+            s.SolicitanteId == solicitanteId &&
+            s.Permiso == permiso &&
+            s.Estado == EstadoSolicitudPermiso.Pendiente);
+        return Task.FromResult(existe);
+    }
 }

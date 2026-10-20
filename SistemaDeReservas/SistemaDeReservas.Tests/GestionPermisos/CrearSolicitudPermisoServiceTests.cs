@@ -50,4 +50,44 @@ public class CrearSolicitudPermisoServiceTests
         Assert.Null(resultado.Solicitud);
         Assert.Empty(_solicitudes.Solicitudes);
     }
+
+    [Fact]
+    [Trait("Requerimiento", "D-GP-05")]
+    public async Task Crear_WithExistingPendingRequest_ReturnsPendienteExistente()
+    {
+        var solicitante = Guid.NewGuid();
+        await _servicio.CrearAsync(solicitante, "CrearReserva");
+
+        var resultado = await _servicio.CrearAsync(solicitante, "crearreserva");
+
+        Assert.Equal(EstadoCreacionSolicitud.SolicitudPendienteExistente, resultado.Estado);
+        Assert.Single(_solicitudes.Solicitudes);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "D-GP-05")]
+    public async Task Crear_WithPendingRequestOfAnotherUser_IsAllowed()
+    {
+        await _servicio.CrearAsync(Guid.NewGuid(), "CrearReserva");
+
+        var resultado = await _servicio.CrearAsync(Guid.NewGuid(), "CrearReserva");
+
+        Assert.Equal(EstadoCreacionSolicitud.Creada, resultado.Estado);
+        Assert.Equal(2, _solicitudes.Solicitudes.Count);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "D-GP-05")]
+    public async Task Crear_AfterRejection_AllowsNewRequest()
+    {
+        var solicitante = Guid.NewGuid();
+        await _servicio.CrearAsync(solicitante, "CrearReserva");
+        var solicitud = Assert.Single(_solicitudes.Solicitudes);
+        solicitud.Estado = EstadoSolicitudPermiso.Rechazada;
+
+        var resultado = await _servicio.CrearAsync(solicitante, "CrearReserva");
+
+        Assert.Equal(EstadoCreacionSolicitud.Creada, resultado.Estado);
+        Assert.Equal(2, _solicitudes.Solicitudes.Count);
+    }
 }
