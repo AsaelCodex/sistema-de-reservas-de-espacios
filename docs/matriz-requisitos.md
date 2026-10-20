@@ -52,6 +52,21 @@
 | RF-CA-21 | Un Administrador lista los usuarios con su rol y su estado. | S2-S4 | Verificado | Endpoint `GET /api/usuarios` con `RequiereRol(Administrador)` + `ListadoUsuariosService`; tests `Get_ReturnsAllUsersWithRolAndEstado`, `Get_NeverIncludesHashesNorTokens` y `EstandarUser_ListingUsers_IsRejectedByServer` (SistemaDeReservas.Tests) |
 | RF-CA-22 | Un usuario con sesión cambia su propia contraseña indicando la actual. | S2-S4 | Verificado | `CambioContrasenaPropiaService` + `PUT api/usuarios/yo/contrasena` (Autenticado; verifica la contraseña actual, aplica RF-CA-14 y RF-CA-12); tests `Cambiar_WithCorrectCurrentPassword_UpdatesPasswordAndInvalidatesSession` y `Cambiar_WithIncorrectCurrentPassword_ReturnsBadRequest` (SistemaDeReservas.Tests) |
 
+## Gestión de permisos
+
+| ID       | Requisito                                                                        | Etapa | Estado    | Evidencia |
+| -------- | -------------------------------------------------------------------------------- | ----- | --------- | --------- |
+| RF-GP-01 | Un usuario Estándar crea una solicitud de permiso.                               | S6-S8 | Pendiente | —         |
+| RF-GP-02 | Un Administrador consulta las solicitudes pendientes.                            | S6-S8 | Pendiente | —         |
+| RF-GP-03 | Un Administrador aprueba una solicitud pendiente.                                | S6-S8 | Pendiente | —         |
+| RF-GP-04 | Un Administrador rechaza una solicitud pendiente indicando el motivo.            | S6-S8 | Pendiente | —         |
+| RF-GP-05 | Al aprobar, el sistema aplica el cambio de permiso automáticamente.              | S6-S8 | Pendiente | —         |
+| RF-GP-06 | Solo se permiten las transiciones de la tabla de transiciones.                   | S6-S8 | Pendiente | —         |
+| RF-GP-07 | Nadie resuelve su propia solicitud.                                              | S6-S8 | Pendiente | —         |
+
+Las decisiones de diseño de esta pieza (catálogo de permisos, duplicados,
+visibilidad y base de administradores) están en `docs/gestion-permisos.md`.
+
 ## Módulo de negocio — Reservas de espacios
 
 | ID        | Requisito                                         | Etapa    | Estado    | Evidencia |
