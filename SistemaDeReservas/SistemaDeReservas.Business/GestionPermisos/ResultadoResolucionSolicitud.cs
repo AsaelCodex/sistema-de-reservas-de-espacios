@@ -17,7 +17,7 @@ public sealed record ResultadoResolucionSolicitud(
     public static ResultadoResolucionSolicitud Aprobada(SolicitudPermiso solicitud) =>
         new(
             EstadoResolucionSolicitud.Aprobada,
-            "La solicitud fue aprobada y pasó al estado Aplicada.",
+            "La solicitud fue aprobada y el permiso del solicitante quedó aplicado.",
             solicitud);
 
     public static ResultadoResolucionSolicitud TransicionProhibida(

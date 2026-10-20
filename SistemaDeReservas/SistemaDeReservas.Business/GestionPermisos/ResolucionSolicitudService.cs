@@ -5,10 +5,14 @@ namespace SistemaDeReservas.Business.GestionPermisos;
 public class ResolucionSolicitudService
 {
     private readonly ISolicitudPermisoRepository _solicitudes;
+    private readonly IPermisoOtorgadoRepository _permisosOtorgados;
 
-    public ResolucionSolicitudService(ISolicitudPermisoRepository solicitudes)
+    public ResolucionSolicitudService(
+        ISolicitudPermisoRepository solicitudes,
+        IPermisoOtorgadoRepository permisosOtorgados)
     {
         _solicitudes = solicitudes;
+        _permisosOtorgados = permisosOtorgados;
     }
 
     public async Task<ResultadoResolucionSolicitud> AprobarAsync(
@@ -41,6 +45,17 @@ public class ResolucionSolicitudService
         solicitud.Estado = EstadoSolicitudPermiso.Aplicada;
 
         await _solicitudes.ActualizarAsync(solicitud, cancellationToken);
+
+        // RF-GP-05: el permiso queda aplicado automáticamente, sin pasos
+        // manuales adicionales después de la aprobación.
+        await _permisosOtorgados.AgregarAsync(new PermisoOtorgado
+        {
+            Id = Guid.NewGuid(),
+            UsuarioId = solicitud.SolicitanteId,
+            Permiso = solicitud.Permiso,
+            SolicitudPermisoId = solicitud.Id,
+            OtorgadoEn = DateTime.UtcNow
+        }, cancellationToken);
 
         return ResultadoResolucionSolicitud.Aprobada(solicitud);
     }

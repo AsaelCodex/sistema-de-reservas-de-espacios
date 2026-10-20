@@ -11,7 +11,8 @@ public class ResolucionSolicitudServiceTests
 
     public ResolucionSolicitudServiceTests()
     {
-        _servicio = new ResolucionSolicitudService(_solicitudes);
+        _servicio = new ResolucionSolicitudService(
+            _solicitudes, new FakePermisoOtorgadoRepository());
     }
 
     [Fact]
