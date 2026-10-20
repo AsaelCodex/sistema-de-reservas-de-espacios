@@ -147,7 +147,7 @@ respuestas controladas (RD-07, RD-08).
 |---|---|---|
 | RF-GP-01 | D-GP-01, D-GP-05 | `CrearSolicitudPermisoTests` (nace `Pendiente`) |
 | RF-GP-02 | D-GP-04, D-GP-08 | `SolicitudesPermisosTests` (Admin 200 / Estándar 403 / sin sesión 401) |
-| RF-GP-03 | D-GP-06 | `TransicionSolicitudTests` (registra aprobador y fecha) |
+| RF-GP-03 | D-GP-06 | `ResolucionSolicitudServiceTests` (registra aprobador y fecha, persiste `Aplicada`; doble aprobación y rechazada no avanzan) |
 | RF-GP-04 | D-GP-06 | `TransicionSolicitudTests` (sin motivo no se completa) |
 | RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4) |
 | RF-GP-06 | D-GP-06 | `TransicionesSolicitudPermisoTests` (tabla) y `TransicionSolicitudPermisoServiceTests` (las 16 combinaciones, aprobación doble y `Rechazada → Aplicada` rechazadas sin cambiar el estado) |
