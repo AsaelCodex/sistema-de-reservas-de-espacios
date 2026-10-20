@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Workers;
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Business.GestionPermisos;
 using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Permissions;
@@ -97,6 +98,7 @@ builder.Services.AddScoped<RestablecerContrasenaService>();
 builder.Services.AddScoped<RecuperacionContrasenaService>();
 builder.Services.AddScoped<CambioContrasenaPropiaService>();
 builder.Services.AddScoped<ListadoCorreosService>();
+builder.Services.AddScoped<CrearSolicitudPermisoService>();
 builder.Services.AddScoped<ProcesadorColaCorreos>();
 builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
