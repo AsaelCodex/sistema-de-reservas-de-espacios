@@ -32,4 +32,13 @@ public class SolicitudPermisoRepository : ISolicitudPermisoRepository
             s.Estado == EstadoSolicitudPermiso.Pendiente,
             cancellationToken);
     }
+
+    public async Task<IReadOnlyList<SolicitudPermiso>> ObtenerPendientesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.SolicitudesPermiso
+            .Where(s => s.Estado == EstadoSolicitudPermiso.Pendiente)
+            .OrderBy(s => s.CreadaEn)
+            .ToListAsync(cancellationToken);
+    }
 }

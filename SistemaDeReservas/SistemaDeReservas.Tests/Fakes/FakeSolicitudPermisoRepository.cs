@@ -25,4 +25,14 @@ public sealed class FakeSolicitudPermisoRepository : ISolicitudPermisoRepository
             s.Estado == EstadoSolicitudPermiso.Pendiente);
         return Task.FromResult(existe);
     }
+
+    public Task<IReadOnlyList<SolicitudPermiso>> ObtenerPendientesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<SolicitudPermiso> resultado = _solicitudes
+            .Where(s => s.Estado == EstadoSolicitudPermiso.Pendiente)
+            .OrderBy(s => s.CreadaEn)
+            .ToList();
+        return Task.FromResult(resultado);
+    }
 }

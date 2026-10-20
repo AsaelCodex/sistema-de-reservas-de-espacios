@@ -8,4 +8,7 @@ public interface ISolicitudPermisoRepository
         Guid solicitanteId,
         Permiso permiso,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SolicitudPermiso>> ObtenerPendientesAsync(
+        CancellationToken cancellationToken = default);
 }
