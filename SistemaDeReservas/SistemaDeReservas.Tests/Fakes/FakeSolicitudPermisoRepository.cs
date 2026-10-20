@@ -35,4 +35,15 @@ public sealed class FakeSolicitudPermisoRepository : ISolicitudPermisoRepository
             .ToList();
         return Task.FromResult(resultado);
     }
+
+    public Task<IReadOnlyList<SolicitudPermiso>> ObtenerPorSolicitanteAsync(
+        Guid solicitanteId,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<SolicitudPermiso> resultado = _solicitudes
+            .Where(s => s.SolicitanteId == solicitanteId)
+            .OrderByDescending(s => s.CreadaEn)
+            .ToList();
+        return Task.FromResult(resultado);
+    }
 }

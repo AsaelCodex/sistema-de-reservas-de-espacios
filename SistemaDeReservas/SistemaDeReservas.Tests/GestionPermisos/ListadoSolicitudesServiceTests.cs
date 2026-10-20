@@ -40,6 +40,24 @@ public class ListadoSolicitudesServiceTests
         Assert.Empty(resultado);
     }
 
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-02")]
+    public async Task ListarPropias_NeverIncludesOtherUsersRequests()
+    {
+        var solicitante = Guid.NewGuid();
+        var otro = Guid.NewGuid();
+        await AgregarAsync(solicitante, EstadoSolicitudPermiso.Pendiente);
+        await AgregarAsync(solicitante, EstadoSolicitudPermiso.Rechazada);
+        await AgregarAsync(otro, EstadoSolicitudPermiso.Pendiente);
+        await AgregarAsync(otro, EstadoSolicitudPermiso.Aprobada);
+
+        var resultado = await _servicio.ListarPropiasAsync(solicitante);
+
+        Assert.Equal(2, resultado.Count);
+        Assert.All(resultado, solicitud => Assert.Equal(solicitante, solicitud.SolicitanteId));
+        Assert.DoesNotContain(resultado, solicitud => solicitud.SolicitanteId == otro);
+    }
+
     private async Task AgregarAsync(Guid solicitante, EstadoSolicitudPermiso estado)
     {
         await _solicitudes.AgregarAsync(new SolicitudPermiso

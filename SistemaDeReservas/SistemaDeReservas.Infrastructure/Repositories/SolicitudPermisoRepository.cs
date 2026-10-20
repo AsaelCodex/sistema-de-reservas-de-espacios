@@ -41,4 +41,14 @@ public class SolicitudPermisoRepository : ISolicitudPermisoRepository
             .OrderBy(s => s.CreadaEn)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<SolicitudPermiso>> ObtenerPorSolicitanteAsync(
+        Guid solicitanteId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.SolicitudesPermiso
+            .Where(s => s.SolicitanteId == solicitanteId)
+            .OrderByDescending(s => s.CreadaEn)
+            .ToListAsync(cancellationToken);
+    }
 }

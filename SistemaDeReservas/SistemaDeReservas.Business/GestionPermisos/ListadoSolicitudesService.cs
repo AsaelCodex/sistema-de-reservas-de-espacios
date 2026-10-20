@@ -16,4 +16,11 @@ public class ListadoSolicitudesService
     {
         return await _solicitudes.ObtenerPendientesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<SolicitudPermiso>> ListarPropiasAsync(
+        Guid solicitanteId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _solicitudes.ObtenerPorSolicitanteAsync(solicitanteId, cancellationToken);
+    }
 }
