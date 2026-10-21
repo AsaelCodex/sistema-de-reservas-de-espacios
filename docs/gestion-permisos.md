@@ -89,6 +89,11 @@ de EF). Si la inserción del permiso falla —por ejemplo, por el índice único
 `AprobarAplicaPermisoTests`, además de la comprobación de rollback total
 contra SQL Server LocalDB realizada durante la revisión de la rama.
 
+También queda afirmado el caso negativo: una solicitud `Rechazada`, una
+resolución prohibida (doble aprobación) o una solicitud inexistente **no
+crean** `PermisoOtorgado` (`ResolucionSolicitudServiceTests`, que observa el
+repositorio de permisos directamente).
+
 ## 5. Base de dos administradores (D-GP-08)
 
 **Situación verificada en el código actual:**
@@ -160,7 +165,7 @@ respuestas controladas (RD-07, RD-08).
 | RF-GP-02 | D-GP-04, D-GP-08 | `SolicitudesPermisosTests` (Admin 200 / Estándar 403 / sin sesión 401) |
 | RF-GP-03 | D-GP-06 | `ResolucionSolicitudServiceTests` (registra aprobador y fecha, persiste `Aplicada`; doble aprobación y rechazada no avanzan) |
 | RF-GP-04 | D-GP-06 | `TransicionSolicitudTests` (sin motivo no se completa) |
-| RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4), incluida la persistencia atómica de solicitud y permiso |
+| RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4), incluida la persistencia atómica de solicitud y permiso, y `ResolucionSolicitudServiceTests` (rechazos, prohibiciones e inexistencia sin `PermisoOtorgado`) |
 | RF-GP-06 | D-GP-06 | `TransicionesSolicitudPermisoTests` (tabla) y `TransicionSolicitudPermisoServiceTests` (las 16 combinaciones, aprobación doble y `Rechazada → Aplicada` rechazadas sin cambiar el estado) |
 | RF-GP-07 | D-GP-05(b), D-GP-08 | `ResolucionPropiaTests` + prueba de API con los dos administradores |
 
