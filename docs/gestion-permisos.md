@@ -145,7 +145,12 @@ cambio" de D-GP-07.
 **Interacción con RF-CA-20:** cada administrador no puede desactivarse a sí
 mismo, pero sí al otro; coherente con el requisito, sin cambios.
 
-## 6. Endpoints previstos
+## 6. Endpoints
+
+Los cinco endpoints están implementados en
+`API/Controllers/SolicitudesPermisosController.cs`; los dos `PUT` de
+resolución se añadieron con RF-GP-03 y RF-GP-04 expuestos por API
+(RD-12).
 
 | Endpoint | Nivel (`RequiereRol`) | Requisitos |
 |---|---|---|
@@ -176,11 +181,11 @@ respuestas controladas (RD-07, RD-08).
 |---|---|---|
 | RF-GP-01 | D-GP-01, D-GP-05 | `CrearSolicitudPermisoTests` (nace `Pendiente`) |
 | RF-GP-02 | D-GP-04, D-GP-08 | `SolicitudesPermisosTests` (Admin 200 / Estándar 403 / sin sesión 401) |
-| RF-GP-03 | D-GP-06 | `ResolucionSolicitudServiceTests` (registra aprobador y fecha, persiste `Aplicada`; doble aprobación y rechazada no avanzan) + `SolicitudResolucionPersistenciaTests.Aprobar_PersistsRequestAndGrantInAnotherContext` (SQL Server, contexto nuevo) |
-| RF-GP-04 | D-GP-06 | `ResolucionSolicitudServiceTests.Rechazar_*` (sin motivo no se completa; con motivo persiste `MotivoRechazo` y el resolutor) + `SolicitudResolucionPersistenciaTests.Rechazar_WithMotivo_PersistsReasonInAnotherContext` (SQL Server, contexto nuevo) |
+| RF-GP-03 | D-GP-06 | `ResolucionSolicitudServiceTests` (registra aprobador y fecha, persiste `Aplicada`; doble aprobación y rechazadas no avanzan) + `SolicitudResolucionPersistenciaTests.Aprobar_PersistsRequestAndGrantInAnotherContext` (SQL Server, contexto nuevo) + API `SolicitudesPermisosTests.PutAprobar_*` (200, 409, 404, 401, 403 de rol y nivel declarado) |
+| RF-GP-04 | D-GP-06 | `ResolucionSolicitudServiceTests.Rechazar_*` (sin motivo no se completa; con motivo persiste `MotivoRechazo` y el resolutor) + `SolicitudResolucionPersistenciaTests.Rechazar_WithMotivo_PersistsReasonInAnotherContext` (SQL Server, contexto nuevo) + API `SolicitudesPermisosTests.PutRechazar_*` (200 con motivo, 400 sin motivo, 401, 403 de rol y nivel declarado) |
 | RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4), incluida la persistencia atómica de solicitud y permiso, `ResolucionSolicitudServiceTests` (rechazos, prohibiciones e inexistencia sin `PermisoOtorgado`) y `SolicitudResolucionPersistenciaTests` + `PermisoOtorgadoPersistenciaTests` (SQL Server real: contexto nuevo, duplicados, índice único y rollback total; §4) |
 | RF-GP-06 | D-GP-06 | `TransicionesSolicitudPermisoTests` (tabla) y `TransicionSolicitudPermisoServiceTests` (las 16 combinaciones, aprobación doble y `Rechazada → Aplicada` rechazadas sin cambiar el estado); en SQL Server, `Aprobar_Twice_KeepsOneGrantAndFirstApprover` y `Aprobar_RejectedRequest_PersistsNoGrant` (contexto nuevo) |
-| RF-GP-07 | D-GP-05(b), D-GP-08 | `ResolucionPropiaTests` (aprobar y rechazar la propia solicitud se rechazan; otro administrador sí puede resolverla) + prueba de API con los dos administradores |
+| RF-GP-07 | D-GP-05(b), D-GP-08 | `ResolucionPropiaTests` (aprobar y rechazar la propia solicitud se rechazan; otro administrador sí puede resolverla) + API `SolicitudesPermisosTests.PutAprobar_OwnRequest_ReturnsForbiddenAndOtherAdminCanApprove` y `PutRechazar_OwnRequest_ReturnsForbiddenAndOtherAdminCanReject` (los dos administradores: 403 al resolver la propia, 200 del otro) |
 
 ## 9. Fuera de alcance y puntos señalados
 

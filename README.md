@@ -58,6 +58,11 @@ módulo de reservas.
 | `PUT /api/usuarios/{id}/estado` | Desactivar/reactivar | Administrador |
 | `PUT /api/usuarios/{id}/contrasena` | Restablecimiento forzado (envía código al correo) | Administrador |
 | `GET /api/correos` | Consulta de la cola de correos (estado, intentos, errores) | Administrador |
+| `POST /api/solicitudes-permisos` | Solicitud de un permiso del catálogo | Autenticado |
+| `GET /api/solicitudes-permisos/mias` | Solicitudes propias con su estado | Autenticado |
+| `GET /api/solicitudes-permisos/pendientes` | Cola de solicitudes por resolver | Administrador |
+| `PUT /api/solicitudes-permisos/{id}/aprobar` | Aprobar (aplica el permiso; 403 si es la propia) | Administrador |
+| `PUT /api/solicitudes-permisos/{id}/rechazar` | Rechazar con motivo (400 si falta) | Administrador |
 
 - **Pendiente (piezas posteriores):** Gestión de Permisos (RF-GP),
   Manejador de Documentos (RF-DOC), Notificaciones (RF-NOT-01 a
