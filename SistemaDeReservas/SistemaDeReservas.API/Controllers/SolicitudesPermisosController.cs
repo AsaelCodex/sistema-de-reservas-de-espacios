@@ -103,6 +103,51 @@ public class SolicitudesPermisosController : ControllerBase
         };
     }
 
+    [HttpPut("{id:guid}/rechazar")]
+    [RequiereRol(NivelOperacion.Administrador)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> PutRechazar(
+        Guid id,
+        [FromBody] RechazarSolicitudPermisoRequest? request,
+        [FromHeader(Name = "Authorization")] string? authorization,
+        CancellationToken cancellationToken)
+    {
+        var consulta = await _sesion.ConsultarUsuarioAsync(authorization, cancellationToken);
+        if (consulta.Estado == EstadoConsulta.Rechazado || consulta.Usuario is null)
+        {
+            return StatusCode(StatusCodes.Status401Unauthorized, new { mensaje = consulta.Mensaje });
+        }
+
+        var resultado = await _resolucion.RechazarAsync(
+            id, consulta.Usuario.Id, request?.Motivo, cancellationToken);
+
+        return resultado.Estado switch
+        {
+            // RF-GP-04: el rechazo guarda el motivo y registra al resolutor.
+            EstadoResolucionSolicitud.Rechazada => Ok(new
+            {
+                id = resultado.Solicitud!.Id,
+                estado = resultado.Solicitud.Estado.ToString(),
+                motivo = resultado.Solicitud.MotivoRechazo,
+                mensaje = resultado.Mensaje
+            }),
+            EstadoResolucionSolicitud.MotivoAusente =>
+                BadRequest(new { mensaje = resultado.Mensaje }),
+            EstadoResolucionSolicitud.SolicitudNoEncontrada =>
+                NotFound(new { mensaje = resultado.Mensaje }),
+            // RF-GP-07: nadie resuelve su propia solicitud.
+            EstadoResolucionSolicitud.ResolucionPropia =>
+                StatusCode(StatusCodes.Status403Forbidden, new { mensaje = resultado.Mensaje }),
+            // RF-GP-06: la solicitud no está en un estado que permita rechazar.
+            _ => Conflict(new { mensaje = resultado.Mensaje })
+        };
+    }
+
     [HttpGet("pendientes")]
     [RequiereRol(NivelOperacion.Administrador)]
     [ProducesResponseType(StatusCodes.Status200OK)]

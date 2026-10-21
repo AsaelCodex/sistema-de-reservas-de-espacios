@@ -372,6 +372,126 @@ public class SolicitudesPermisosTests
         Assert.Equal(NivelOperacion.Administrador, nivel);
     }
 
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-04")]
+    public async Task PutRechazar_AsAdministrator_RejectsWithMotivo()
+    {
+        var solicitante = await CrearUsuarioAsync(Rol.Estandar);
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var token = await AbrirSesionAsync(administrador);
+        var solicitud = await AgregarSolicitudAsync(
+            solicitante.Id, EstadoSolicitudPermiso.Pendiente);
+        var request = new RechazarSolicitudPermisoRequest { Motivo = "No aplica este ciclo" };
+
+        var resultado = await _controller.PutRechazar(
+            solicitud.Id, request, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
+        Assert.Contains("No aplica este ciclo", JsonSerializer.Serialize(respuesta.Value));
+        var guardada = Assert.Single(_solicitudes.Solicitudes);
+        Assert.Equal(EstadoSolicitudPermiso.Rechazada, guardada.Estado);
+        Assert.Equal("No aplica este ciclo", guardada.MotivoRechazo);
+        Assert.Equal(administrador.Id, guardada.AprobadorId);
+        Assert.NotNull(guardada.ResueltaEn);
+        // RF-GP-05: rechazar por API nunca crea permiso.
+        Assert.Empty(_permisosOtorgados.Permisos);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-04")]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task PutRechazar_WithoutMotivo_ReturnsBadRequest()
+    {
+        var solicitante = await CrearUsuarioAsync(Rol.Estandar);
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var token = await AbrirSesionAsync(administrador);
+        var solicitud = await AgregarSolicitudAsync(
+            solicitante.Id, EstadoSolicitudPermiso.Pendiente);
+        var request = new RechazarSolicitudPermisoRequest { Motivo = "   " };
+
+        var resultado = await _controller.PutRechazar(
+            solicitud.Id, request, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status400BadRequest, respuesta.StatusCode);
+        var guardada = Assert.Single(_solicitudes.Solicitudes);
+        Assert.Equal(EstadoSolicitudPermiso.Pendiente, guardada.Estado);
+        Assert.Null(guardada.MotivoRechazo);
+        Assert.Null(guardada.AprobadorId);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-07")]
+    public async Task PutRechazar_OwnRequest_ReturnsForbiddenAndOtherAdminCanReject()
+    {
+        // Prueba con los dos administradores (uso previsto de D-GP-08).
+        var adminA = await CrearUsuarioAsync(Rol.Administrador);
+        var adminB = await CrearUsuarioAsync(Rol.Administrador);
+        var tokenA = await AbrirSesionAsync(adminA);
+        var tokenB = await AbrirSesionAsync(adminB);
+        var solicitud = await AgregarSolicitudAsync(
+            adminA.Id, EstadoSolicitudPermiso.Pendiente);
+        var request = new RechazarSolicitudPermisoRequest { Motivo = "Motivo ajeno" };
+
+        var propia = await _controller.PutRechazar(
+            solicitud.Id, request, $"Bearer {tokenA}", CancellationToken.None);
+
+        var propiaRespuesta = Assert.IsAssignableFrom<ObjectResult>(propia);
+        Assert.Equal(StatusCodes.Status403Forbidden, propiaRespuesta.StatusCode);
+        var guardada = Assert.Single(_solicitudes.Solicitudes);
+        Assert.Equal(EstadoSolicitudPermiso.Pendiente, guardada.Estado);
+        Assert.Null(guardada.MotivoRechazo);
+
+        var ajena = await _controller.PutRechazar(
+            solicitud.Id, request, $"Bearer {tokenB}", CancellationToken.None);
+
+        var ajenaRespuesta = Assert.IsAssignableFrom<ObjectResult>(ajena);
+        Assert.Equal(StatusCodes.Status200OK, ajenaRespuesta.StatusCode);
+        Assert.Equal(EstadoSolicitudPermiso.Rechazada, _solicitudes.Solicitudes.Single().Estado);
+        Assert.Equal(adminB.Id, _solicitudes.Solicitudes.Single().AprobadorId);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-06")]
+    public async Task PutRechazar_WithoutSession_ReturnsUnauthorized()
+    {
+        var request = new RechazarSolicitudPermisoRequest { Motivo = "Motivo" };
+
+        var resultado = await _controller.PutRechazar(
+            Guid.NewGuid(), request, null, CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status401Unauthorized, respuesta.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-06")]
+    public async Task PutRechazar_AsEstandarUser_IsRejectedByServer()
+    {
+        var estandar = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(estandar);
+        var contexto = Contexto(
+            $"Bearer {token}",
+            Accion(nameof(SolicitudesPermisosController.PutRechazar)));
+
+        await _filtro.OnAuthorizationAsync(contexto);
+
+        var respuesta = Assert.IsType<ObjectResult>(contexto.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, respuesta.StatusCode);
+        Assert.Contains("Administrador", JsonSerializer.Serialize(respuesta.Value));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-05")]
+    public void PutRechazar_DeclaresAdministradorLevel()
+    {
+        var nivel = DeclaracionOperaciones.ObtenerNivel(
+            Accion(nameof(SolicitudesPermisosController.PutRechazar)));
+
+        Assert.Equal(NivelOperacion.Administrador, nivel);
+    }
+
     private async Task<SolicitudPermiso> AgregarSolicitudAsync(
         Guid solicitante,
         EstadoSolicitudPermiso estado)
