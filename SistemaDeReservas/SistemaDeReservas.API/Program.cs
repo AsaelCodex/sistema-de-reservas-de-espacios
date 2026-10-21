@@ -101,6 +101,7 @@ builder.Services.AddScoped<CambioContrasenaPropiaService>();
 builder.Services.AddScoped<ListadoCorreosService>();
 builder.Services.AddScoped<CrearSolicitudPermisoService>();
 builder.Services.AddScoped<ListadoSolicitudesService>();
+builder.Services.AddScoped<ResolucionSolicitudService>();
 builder.Services.AddScoped<ProcesadorColaCorreos>();
 builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

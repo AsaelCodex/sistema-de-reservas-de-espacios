@@ -14,15 +14,18 @@ public class SolicitudesPermisosController : ControllerBase
     private readonly CrearSolicitudPermisoService _crear;
     private readonly SesionService _sesion;
     private readonly ListadoSolicitudesService _listado;
+    private readonly ResolucionSolicitudService _resolucion;
 
     public SolicitudesPermisosController(
         CrearSolicitudPermisoService crear,
         SesionService sesion,
-        ListadoSolicitudesService listado)
+        ListadoSolicitudesService listado,
+        ResolucionSolicitudService resolucion)
     {
         _crear = crear;
         _sesion = sesion;
         _listado = listado;
+        _resolucion = resolucion;
     }
 
     [HttpPost]
@@ -57,6 +60,46 @@ public class SolicitudesPermisosController : ControllerBase
             EstadoCreacionSolicitud.SolicitudPendienteExistente =>
                 Conflict(new { mensaje = resultado.Mensaje }),
             _ => BadRequest(new { mensaje = resultado.Mensaje })
+        };
+    }
+
+    [HttpPut("{id:guid}/aprobar")]
+    [RequiereRol(NivelOperacion.Administrador)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> PutAprobar(
+        Guid id,
+        [FromHeader(Name = "Authorization")] string? authorization,
+        CancellationToken cancellationToken)
+    {
+        var consulta = await _sesion.ConsultarUsuarioAsync(authorization, cancellationToken);
+        if (consulta.Estado == EstadoConsulta.Rechazado || consulta.Usuario is null)
+        {
+            return StatusCode(StatusCodes.Status401Unauthorized, new { mensaje = consulta.Mensaje });
+        }
+
+        var resultado = await _resolucion.AprobarAsync(
+            id, consulta.Usuario.Id, cancellationToken);
+
+        return resultado.Estado switch
+        {
+            // RF-GP-03/05: la aprobación aplica el permiso del solicitante.
+            EstadoResolucionSolicitud.Aprobada => Ok(new
+            {
+                id = resultado.Solicitud!.Id,
+                estado = resultado.Solicitud.Estado.ToString(),
+                mensaje = resultado.Mensaje
+            }),
+            EstadoResolucionSolicitud.SolicitudNoEncontrada =>
+                NotFound(new { mensaje = resultado.Mensaje }),
+            // RF-GP-07: nadie resuelve su propia solicitud.
+            EstadoResolucionSolicitud.ResolucionPropia =>
+                StatusCode(StatusCodes.Status403Forbidden, new { mensaje = resultado.Mensaje }),
+            // RF-GP-06: la solicitud no está en un estado que permita aprobar.
+            _ => Conflict(new { mensaje = resultado.Mensaje })
         };
     }
 

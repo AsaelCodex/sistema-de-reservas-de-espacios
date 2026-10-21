@@ -33,7 +33,8 @@ public class SolicitudesPermisosTests
         _controller = new SolicitudesPermisosController(
             new CrearSolicitudPermisoService(_solicitudes, _permisosOtorgados),
             sesion,
-            new ListadoSolicitudesService(_solicitudes));
+            new ListadoSolicitudesService(_solicitudes),
+            new ResolucionSolicitudService(_solicitudes));
         _filtro = new AutorizacionRolFilter(sesion);
     }
 
@@ -243,6 +244,132 @@ public class SolicitudesPermisosTests
             Accion(nameof(SolicitudesPermisosController.GetMias)));
 
         Assert.Equal(NivelOperacion.Autenticado, nivel);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-03")]
+    [Trait("Requerimiento", "RF-GP-05")]
+    public async Task PutAprobar_AsAdministrator_AppliesRequestAndGrantsPermission()
+    {
+        var solicitante = await CrearUsuarioAsync(Rol.Estandar);
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var token = await AbrirSesionAsync(administrador);
+        var solicitud = await AgregarSolicitudAsync(
+            solicitante.Id, EstadoSolicitudPermiso.Pendiente);
+
+        var resultado = await _controller.PutAprobar(
+            solicitud.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
+        Assert.Contains("Aplicada", JsonSerializer.Serialize(respuesta.Value));
+        var guardada = Assert.Single(_solicitudes.Solicitudes);
+        Assert.Equal(EstadoSolicitudPermiso.Aplicada, guardada.Estado);
+        Assert.Equal(administrador.Id, guardada.AprobadorId);
+        Assert.NotNull(guardada.ResueltaEn);
+        // RF-GP-05: aprobar por API crea el permiso del solicitante.
+        Assert.Single(_permisosOtorgados.Permisos);
+        Assert.Equal(solicitante.Id, _permisosOtorgados.Permisos.Single().UsuarioId);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-07")]
+    public async Task PutAprobar_OwnRequest_ReturnsForbiddenAndOtherAdminCanApprove()
+    {
+        // Prueba con los dos administradores (uso previsto de D-GP-08).
+        var adminA = await CrearUsuarioAsync(Rol.Administrador);
+        var adminB = await CrearUsuarioAsync(Rol.Administrador);
+        var tokenA = await AbrirSesionAsync(adminA);
+        var tokenB = await AbrirSesionAsync(adminB);
+        var solicitud = await AgregarSolicitudAsync(
+            adminA.Id, EstadoSolicitudPermiso.Pendiente);
+
+        var propia = await _controller.PutAprobar(
+            solicitud.Id, $"Bearer {tokenA}", CancellationToken.None);
+
+        var propiaRespuesta = Assert.IsAssignableFrom<ObjectResult>(propia);
+        Assert.Equal(StatusCodes.Status403Forbidden, propiaRespuesta.StatusCode);
+        Assert.Equal(EstadoSolicitudPermiso.Pendiente, _solicitudes.Solicitudes.Single().Estado);
+        Assert.Empty(_permisosOtorgados.Permisos);
+
+        var ajena = await _controller.PutAprobar(
+            solicitud.Id, $"Bearer {tokenB}", CancellationToken.None);
+
+        var ajenaRespuesta = Assert.IsAssignableFrom<ObjectResult>(ajena);
+        Assert.Equal(StatusCodes.Status200OK, ajenaRespuesta.StatusCode);
+        Assert.Equal(EstadoSolicitudPermiso.Aplicada, _solicitudes.Solicitudes.Single().Estado);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-06")]
+    public async Task PutAprobar_AppliedRequest_ReturnsConflict()
+    {
+        var solicitante = await CrearUsuarioAsync(Rol.Estandar);
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var token = await AbrirSesionAsync(administrador);
+        var solicitud = await AgregarSolicitudAsync(
+            solicitante.Id, EstadoSolicitudPermiso.Pendiente);
+        await _controller.PutAprobar(solicitud.Id, $"Bearer {token}", CancellationToken.None);
+
+        var segunda = await _controller.PutAprobar(
+            solicitud.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(segunda);
+        Assert.Equal(StatusCodes.Status409Conflict, respuesta.StatusCode);
+        // El intento repetido no añade un segundo permiso.
+        Assert.Single(_permisosOtorgados.Permisos);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task PutAprobar_WithUnknownRequest_ReturnsNotFound()
+    {
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var token = await AbrirSesionAsync(administrador);
+
+        var resultado = await _controller.PutAprobar(
+            Guid.NewGuid(), $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status404NotFound, respuesta.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-06")]
+    public async Task PutAprobar_WithoutSession_ReturnsUnauthorized()
+    {
+        var resultado = await _controller.PutAprobar(
+            Guid.NewGuid(), null, CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status401Unauthorized, respuesta.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-06")]
+    public async Task PutAprobar_AsEstandarUser_IsRejectedByServer()
+    {
+        var estandar = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(estandar);
+        var contexto = Contexto(
+            $"Bearer {token}",
+            Accion(nameof(SolicitudesPermisosController.PutAprobar)));
+
+        await _filtro.OnAuthorizationAsync(contexto);
+
+        var respuesta = Assert.IsType<ObjectResult>(contexto.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, respuesta.StatusCode);
+        Assert.Contains("Administrador", JsonSerializer.Serialize(respuesta.Value));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-CA-05")]
+    public void PutAprobar_DeclaresAdministradorLevel()
+    {
+        var nivel = DeclaracionOperaciones.ObtenerNivel(
+            Accion(nameof(SolicitudesPermisosController.PutAprobar)));
+
+        Assert.Equal(NivelOperacion.Administrador, nivel);
     }
 
     private async Task<SolicitudPermiso> AgregarSolicitudAsync(
