@@ -49,6 +49,13 @@ Transiciones oficiales (copia literal de `requerimientos-core.md`, sección 4):
   `AprobadorId`, `ResueltaEn` (RF-GP-03) y el `PermisoOtorgado` creado
   (RF-GP-05). Aprobar dos veces fracasa porque la solicitud ya está `Aplicada`
   (RF-GP-06).
+- Semántica de `AprobadorId` (esquema oficial: un único campo de resolutor):
+  registra al administrador que **resolvió** la solicitud, sea aprobando
+  (RF-GP-03) o rechazando (RF-GP-04), siempre junto a `ResueltaEn`. Al
+  rechazar, el motivo es obligatorio (`MotivoRechazo`, RD-07) y no se crea
+  `PermisoOtorgado`; al aprobar, `MotivoRechazo` queda `null`. En una
+  solicitud sin resolver el campo es `null`. No existe un campo «rechazador»
+  aparte: así se evita que la semántica dependa de la pieza de Auditoría.
 - Las máquinas de Gestión de permisos y de reservas permanecen independientes:
   no comparten estados ni componentes (RF-NEG-09).
 
@@ -170,7 +177,7 @@ respuestas controladas (RD-07, RD-08).
 | RF-GP-01 | D-GP-01, D-GP-05 | `CrearSolicitudPermisoTests` (nace `Pendiente`) |
 | RF-GP-02 | D-GP-04, D-GP-08 | `SolicitudesPermisosTests` (Admin 200 / Estándar 403 / sin sesión 401) |
 | RF-GP-03 | D-GP-06 | `ResolucionSolicitudServiceTests` (registra aprobador y fecha, persiste `Aplicada`; doble aprobación y rechazada no avanzan) + `SolicitudResolucionPersistenciaTests.Aprobar_PersistsRequestAndGrantInAnotherContext` (SQL Server, contexto nuevo) |
-| RF-GP-04 | D-GP-06 | `TransicionSolicitudTests` (sin motivo no se completa) |
+| RF-GP-04 | D-GP-06 | `ResolucionSolicitudServiceTests.Rechazar_*` (sin motivo no se completa; con motivo persiste `MotivoRechazo` y el resolutor) + `SolicitudResolucionPersistenciaTests.Rechazar_WithMotivo_PersistsReasonInAnotherContext` (SQL Server, contexto nuevo) |
 | RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4), incluida la persistencia atómica de solicitud y permiso, `ResolucionSolicitudServiceTests` (rechazos, prohibiciones e inexistencia sin `PermisoOtorgado`) y `SolicitudResolucionPersistenciaTests` + `PermisoOtorgadoPersistenciaTests` (SQL Server real: contexto nuevo, duplicados, índice único y rollback total; §4) |
 | RF-GP-06 | D-GP-06 | `TransicionesSolicitudPermisoTests` (tabla) y `TransicionSolicitudPermisoServiceTests` (las 16 combinaciones, aprobación doble y `Rechazada → Aplicada` rechazadas sin cambiar el estado); en SQL Server, `Aprobar_Twice_KeepsOneGrantAndFirstApprover` y `Aprobar_RejectedRequest_PersistsNoGrant` (contexto nuevo) |
 | RF-GP-07 | D-GP-05(b), D-GP-08 | `ResolucionPropiaTests` + prueba de API con los dos administradores |
