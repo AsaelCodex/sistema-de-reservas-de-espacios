@@ -6,12 +6,13 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 
 public class ResolucionSolicitudServiceTests
 {
-    private readonly FakeSolicitudPermisoRepository _solicitudes =
-        new(new FakePermisoOtorgadoRepository());
+    private readonly FakePermisoOtorgadoRepository _permisosOtorgados = new();
+    private readonly FakeSolicitudPermisoRepository _solicitudes;
     private readonly ResolucionSolicitudService _servicio;
 
     public ResolucionSolicitudServiceTests()
     {
+        _solicitudes = new FakeSolicitudPermisoRepository(_permisosOtorgados);
         _servicio = new ResolucionSolicitudService(_solicitudes);
     }
 
@@ -61,10 +62,13 @@ public class ResolucionSolicitudServiceTests
         Assert.Equal(EstadoSolicitudPermiso.Aplicada, guardada.Estado);
         Assert.Equal(primerAprobador, guardada.AprobadorId);
         Assert.Equal(resueltaEn, guardada.ResueltaEn);
+        // El intento prohibido no añade un segundo grant al único legítimo.
+        Assert.Single(_permisosOtorgados.Permisos);
     }
 
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
+    [Trait("Requerimiento", "RF-GP-05")]
     public async Task Aprobar_RejectedRequest_IsRejectedAndKeepsState()
     {
         var solicitud = await CrearSolicitudAsync(EstadoSolicitudPermiso.Rechazada);
@@ -76,6 +80,8 @@ public class ResolucionSolicitudServiceTests
         Assert.Equal(EstadoSolicitudPermiso.Rechazada, guardada.Estado);
         Assert.Null(guardada.AprobadorId);
         Assert.Null(guardada.ResueltaEn);
+        // RF-GP-05: el permiso solo se aplica al aprobar; un rechazo no crea grant.
+        Assert.Empty(_permisosOtorgados.Permisos);
     }
 
     [Fact]
@@ -85,6 +91,7 @@ public class ResolucionSolicitudServiceTests
         var resultado = await _servicio.AprobarAsync(Guid.NewGuid(), Guid.NewGuid());
 
         Assert.Equal(EstadoResolucionSolicitud.SolicitudNoEncontrada, resultado.Estado);
+        Assert.Empty(_permisosOtorgados.Permisos);
     }
 
     private async Task<SolicitudPermiso> CrearSolicitudAsync(EstadoSolicitudPermiso estado)
