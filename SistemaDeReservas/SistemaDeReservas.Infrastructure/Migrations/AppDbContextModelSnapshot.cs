@@ -60,6 +60,70 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.ToTable("CorreosEnCola");
                 });
 
+            modelBuilder.Entity("SistemaDeReservas.Core.Permissions.PermisoOtorgado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("OtorgadoEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Permiso")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("SolicitudPermisoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SolicitudPermisoId");
+
+                    b.HasIndex("UsuarioId", "Permiso")
+                        .IsUnique();
+
+                    b.ToTable("PermisosOtorgados");
+                });
+
+            modelBuilder.Entity("SistemaDeReservas.Core.Permissions.SolicitudPermiso", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AprobadorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreadaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MotivoRechazo")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Permiso")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ResueltaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("SolicitanteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SolicitanteId", "Permiso")
+                        .IsUnique()
+                        .HasFilter("[Estado] = 0");
+
+                    b.ToTable("SolicitudesPermiso");
+                });
+
             modelBuilder.Entity("SistemaDeReservas.Core.Reservations.Reserva", b =>
                 {
                     b.Property<Guid>("Id")
@@ -228,6 +292,36 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("SistemaDeReservas.Core.Permissions.PermisoOtorgado", b =>
+                {
+                    b.HasOne("SistemaDeReservas.Core.Permissions.SolicitudPermiso", "SolicitudPermiso")
+                        .WithMany()
+                        .HasForeignKey("SolicitudPermisoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SistemaDeReservas.Core.Users.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SolicitudPermiso");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("SistemaDeReservas.Core.Permissions.SolicitudPermiso", b =>
+                {
+                    b.HasOne("SistemaDeReservas.Core.Users.Usuario", "Solicitante")
+                        .WithMany()
+                        .HasForeignKey("SolicitanteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Solicitante");
                 });
 
             modelBuilder.Entity("SistemaDeReservas.Core.Reservations.Reserva", b =>

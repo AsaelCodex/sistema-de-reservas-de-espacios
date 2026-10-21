@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Workers;
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Business.GestionPermisos;
 using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
@@ -43,6 +45,8 @@ builder.Services.AddScoped<IColaCorreosRepository, ColaCorreosRepository>();
 builder.Services.AddScoped<ISesionRepository, SesionRepository>();
 builder.Services.AddScoped<ICodigoRecuperacionRepository, CodigoRecuperacionRepository>();
 builder.Services.AddScoped<IReservaRepository, ReservaRepository>();
+builder.Services.AddScoped<ISolicitudPermisoRepository, SolicitudPermisoRepository>();
+builder.Services.AddScoped<IPermisoOtorgadoRepository, PermisoOtorgadoRepository>();
 builder.Services.AddSingleton<IEnvioCorreo>(sp =>
 {
     var smtpHost = builder.Configuration["CorreoSmtp:Host"];
@@ -95,6 +99,9 @@ builder.Services.AddScoped<RestablecerContrasenaService>();
 builder.Services.AddScoped<RecuperacionContrasenaService>();
 builder.Services.AddScoped<CambioContrasenaPropiaService>();
 builder.Services.AddScoped<ListadoCorreosService>();
+builder.Services.AddScoped<CrearSolicitudPermisoService>();
+builder.Services.AddScoped<ListadoSolicitudesService>();
+builder.Services.AddScoped<ResolucionSolicitudService>();
 builder.Services.AddScoped<ProcesadorColaCorreos>();
 builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
