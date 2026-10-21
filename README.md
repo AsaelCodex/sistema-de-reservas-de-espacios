@@ -36,8 +36,10 @@ módulo de reservas.
   RF-CA-22) y la máquina de estados del negocio (RF-NEG-03, RF-NEG-04,
   RF-NEG-05 y RF-NEG-09). El detalle y la evidencia están en
   `docs/matriz-requisitos.md`.
-- **Pruebas:** 191, todas en verde. No requieren base de datos ni
-  servidor: usan fakes y un hasheador real de prueba.
+- **Pruebas:** 268, todas en verde: 261 unitarias con fakes (no necesitan
+  base de datos) y 7 de persistencia sobre SQL Server LocalDB
+  (`SistemaDeReservas.Tests/Persistencia`), con una base propia por
+  prueba que se elimina al terminar.
 - **Endpoints:**
 
 | Método y ruta | Descripción | Rol |
@@ -67,7 +69,9 @@ módulo de reservas.
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` debe mostrar 10.x)
 - Git
-- SQL Server (LocalDB, Express o superior) para ejecutar la API
+- SQL Server (LocalDB, Express o superior) para ejecutar la API y para
+  las 7 pruebas de persistencia (si no está disponible, esas pruebas se
+  omiten con el motivo; ver «Cómo ejecutar las pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
 
@@ -157,11 +161,37 @@ Comprobar el funcionamiento:
 dotnet test SistemaDeReservas/SistemaDeReservas.sln
 ```
 
-Resultado esperado: **191/191** en verde. Cada prueba declara el
+Resultado esperado: **268/268** en verde. Cada prueba declara el
 requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]`,
-`[Trait("Requerimiento", "RF-NOT-XX")]` o
-`[Trait("Requerimiento", "RF-NEG-XX")]`.
-Las pruebas no necesitan base de datos ni servidor.
+`[Trait("Requerimiento", "RF-GP-XX")]`,
+`[Trait("Requerimiento", "RF-NOT-XX")]`,
+`[Trait("Requerimiento", "RF-NEG-XX")]` o
+`[Trait("Requerimiento", "RD-XX")]`.
+
+261 pruebas son unitarias: no necesitan base de datos ni servidor
+(usan fakes y un hasheador real de prueba). Las 7 de persistencia
+(`SistemaDeReservas.Tests/Persistencia`, RD-09) sí requieren SQL Server
+LocalDB:
+
+```powershell
+# solo las 7 pruebas de persistencia
+dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
+
+# solo las 261 unitarias
+dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
+```
+
+- Cada prueba de persistencia crea su propia base `Reservas_Tests_*` en
+  LocalDB, aplica las migraciones sobre una base vacía y la elimina al
+  terminar (también cuando la prueba falla); tras la corrida no queda
+  ninguna base temporal.
+- Sin LocalDB, esas 7 pruebas se **omiten** con el motivo. Para exigir
+  su ejecución (p. ej. en CI), definir `REQUIERE_PERSISTENCIA=1`: la
+  ausencia de LocalDB **falla** las pruebas con un mensaje claro en vez
+  de omitirlas.
+- `LOCALDB_PROBE_DATASOURCE` solo altera la sonda de disponibilidad
+  (sirve para verificar los dos comportamientos anteriores); la creación
+  de bases siempre usa `(localdb)\MSSQLLocalDB`.
 
 ## Documentación
 
