@@ -22,7 +22,7 @@
 | RD-08 | Errores sin exposición de información interna.                       | Todo el proyecto | Pendiente | —         |
 | RD-09 | Persistencia de datos fuera del proceso.                             | Todo el proyecto | Pendiente | —         |
 | RD-10 | Credenciales mediante variables de entorno.                          | Todo el proyecto | Pendiente | —         |
-| RD-11 | Criterio uniforme para fechas y horas.                               | Todo el proyecto | Pendiente | —         |
+| RD-11 | Criterio uniforme para fechas y horas.                               | Todo el proyecto | Verificado | Todas las registraciones usan `UtcNow` con captura única por operación (auditoría de las 58 apariciones en el código; p. ej. `emitidoEn`/`emitidaEn` en ControlAcceso); test `Aprobar_RecordsSameTimestampForRequestAndGrant` (RD-11) e igualdad `ResueltaEn` = `OtorgadoEn` verificada contra SQL Server LocalDB |
 | RD-12 | Cada pieza puede probarse independientemente.                        | Todo el proyecto | Pendiente | —         |
 
 ## Control de Acceso
