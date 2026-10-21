@@ -78,6 +78,17 @@ reservas; ese servicio deberá consultar `AutorizacionPermisosService` en lugar
 de duplicar la comprobación. Este alcance de la evidencia queda declarado para
 no sobrevender el requisito en la matriz de trazabilidad.
 
+**Consistencia de la persistencia:** `AprobarAsync` persiste la solicitud
+resuelta y su `PermisoOtorgado` en una sola operación
+(`ISolicitudPermisoRepository.GuardarResolucionAsync`, un único `SaveChanges`
+de EF). Si la inserción del permiso falla —por ejemplo, por el índice único
+`(UsuarioId, Permiso)`— no se persiste **ningún** cambio: la solicitud sigue
+`Pendiente`, sin aprobador ni fecha, y no queda el estado inconsistente
+"Aplicada sin permiso" que permitían dos guardadas separadas. Verificación:
+`Aprobar_WhenGrantCannotBeStored_PersistsNoChangesAtAll` en
+`AprobarAplicaPermisoTests`, además de la comprobación de rollback total
+contra SQL Server LocalDB realizada durante la revisión de la rama.
+
 ## 5. Base de dos administradores (D-GP-08)
 
 **Situación verificada en el código actual:**
@@ -149,7 +160,7 @@ respuestas controladas (RD-07, RD-08).
 | RF-GP-02 | D-GP-04, D-GP-08 | `SolicitudesPermisosTests` (Admin 200 / Estándar 403 / sin sesión 401) |
 | RF-GP-03 | D-GP-06 | `ResolucionSolicitudServiceTests` (registra aprobador y fecha, persiste `Aplicada`; doble aprobación y rechazada no avanzan) |
 | RF-GP-04 | D-GP-06 | `TransicionSolicitudTests` (sin motivo no se completa) |
-| RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4) |
+| RF-GP-05 | D-GP-03, D-GP-07 | `AprobarAplicaPermisoTests` + `AutorizacionPermisosServiceTests` (§4), incluida la persistencia atómica de solicitud y permiso |
 | RF-GP-06 | D-GP-06 | `TransicionesSolicitudPermisoTests` (tabla) y `TransicionSolicitudPermisoServiceTests` (las 16 combinaciones, aprobación doble y `Rechazada → Aplicada` rechazadas sin cambiar el estado) |
 | RF-GP-07 | D-GP-05(b), D-GP-08 | `ResolucionPropiaTests` + prueba de API con los dos administradores |
 
