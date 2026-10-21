@@ -6,7 +6,9 @@ public enum EstadoResolucionSolicitud
 {
     Aprobada,
     TransicionProhibida,
-    SolicitudNoEncontrada
+    SolicitudNoEncontrada,
+    Rechazada,
+    MotivoAusente
 }
 
 public sealed record ResultadoResolucionSolicitud(
@@ -32,5 +34,17 @@ public sealed record ResultadoResolucionSolicitud(
         new(
             EstadoResolucionSolicitud.SolicitudNoEncontrada,
             "La solicitud indicada no existe.",
+            null);
+
+    public static ResultadoResolucionSolicitud Rechazada(SolicitudPermiso solicitud) =>
+        new(
+            EstadoResolucionSolicitud.Rechazada,
+            "La solicitud fue rechazada y el motivo quedó registrado.",
+            solicitud);
+
+    public static ResultadoResolucionSolicitud MotivoAusente() =>
+        new(
+            EstadoResolucionSolicitud.MotivoAusente,
+            "El rechazo requiere un motivo escrito.",
             null);
 }

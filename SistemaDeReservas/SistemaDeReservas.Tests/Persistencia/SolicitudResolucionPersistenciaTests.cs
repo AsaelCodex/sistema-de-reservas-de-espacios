@@ -98,4 +98,33 @@ public class SolicitudResolucionPersistenciaTests : BasePruebaPersistencia
             .CountAsync(o => o.UsuarioId == solicitante.Id));
         Assert.False(await PuedeAsync(solicitante.Id, Permiso.CrearReserva));
     }
+
+    [LocalDbFact]
+    [Trait("Categoria", "Persistencia")]
+    [Trait("Requerimiento", "RF-GP-04")]
+    public async Task Rechazar_WithMotivo_PersistsReasonInAnotherContext()
+    {
+        var solicitante = await CrearUsuarioAsync();
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var solicitud = await CrearSolicitudAsync(solicitante.Id);
+
+        var resultado = await RechazarAsync(
+            solicitud.Id, administrador.Id, "No corresponde a tu horario.");
+
+        Assert.Equal(EstadoResolucionSolicitud.Rechazada, resultado.Estado);
+
+        // Contexto nuevo e independiente: el motivo vive en SQL Server.
+        await using var contexto = NuevoContexto();
+        var guardada = await contexto.SolicitudesPermiso.AsNoTracking()
+            .SingleAsync(x => x.Id == solicitud.Id);
+        Assert.Equal(EstadoSolicitudPermiso.Rechazada, guardada.Estado);
+        Assert.Equal("No corresponde a tu horario.", guardada.MotivoRechazo);
+        // AprobadorId es el resolutor del esquema oficial: aquí, el rechazador.
+        Assert.Equal(administrador.Id, guardada.AprobadorId);
+        Assert.NotNull(guardada.ResueltaEn);
+        // RF-GP-05: el rechazo no otorga permiso.
+        Assert.Equal(0, await contexto.PermisosOtorgados.AsNoTracking()
+            .CountAsync(o => o.UsuarioId == solicitante.Id));
+        Assert.False(await PuedeAsync(solicitante.Id, Permiso.CrearReserva));
+    }
 }

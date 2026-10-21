@@ -157,6 +157,16 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
         return await servicio.AprobarAsync(solicitudId, aprobadorId);
     }
 
+    protected async Task<ResultadoResolucionSolicitud> RechazarAsync(
+        Guid solicitudId,
+        Guid rechazadorId,
+        string motivo)
+    {
+        await using var contexto = NuevoContexto();
+        var servicio = new ResolucionSolicitudService(new SolicitudPermisoRepository(contexto));
+        return await servicio.RechazarAsync(solicitudId, rechazadorId, motivo);
+    }
+
     protected async Task<ResultadoCreacionSolicitud> SolicitarPermisoAsync(Guid solicitanteId)
     {
         await using var contexto = NuevoContexto();

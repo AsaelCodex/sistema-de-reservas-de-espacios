@@ -56,4 +56,48 @@ public class ResolucionSolicitudService
 
         return ResultadoResolucionSolicitud.Aprobada(solicitud);
     }
+
+    /// <summary>
+    /// RF-GP-04: un administrador rechaza una solicitud pendiente indicando el
+    /// motivo; sin motivo escrito el rechazo no se completa.
+    /// </summary>
+    public async Task<ResultadoResolucionSolicitud> RechazarAsync(
+        Guid solicitudId,
+        Guid rechazadorId,
+        string? motivo,
+        CancellationToken cancellationToken = default)
+    {
+        // RD-07: el motivo es entrada externa y se valida antes de usarse.
+        if (string.IsNullOrWhiteSpace(motivo))
+        {
+            return ResultadoResolucionSolicitud.MotivoAusente();
+        }
+
+        var solicitud = await _solicitudes.ObtenerPorIdAsync(solicitudId, cancellationToken);
+        if (solicitud is null)
+        {
+            return ResultadoResolucionSolicitud.SolicitudNoEncontrada();
+        }
+
+        // RF-GP-06: la tabla centralizada decide antes de tocar el estado:
+        // solo Pendiente → Rechazada está permitido.
+        if (!TransicionesSolicitudPermiso.EsValida(
+                solicitud.Estado, EstadoSolicitudPermiso.Rechazada))
+        {
+            return ResultadoResolucionSolicitud.TransicionProhibida(
+                solicitud.Estado, EstadoSolicitudPermiso.Rechazada);
+        }
+
+        // RD-11: una sola hora por operación. AprobadorId es el resolutor del
+        // esquema oficial: aquí registra al administrador que rechaza, junto a
+        // la fecha de resolución y el motivo. Un rechazo no crea PermisoOtorgado.
+        solicitud.Estado = EstadoSolicitudPermiso.Rechazada;
+        solicitud.AprobadorId = rechazadorId;
+        solicitud.ResueltaEn = DateTime.UtcNow;
+        solicitud.MotivoRechazo = motivo.Trim();
+
+        await _solicitudes.ActualizarAsync(solicitud, cancellationToken);
+
+        return ResultadoResolucionSolicitud.Rechazada(solicitud);
+    }
 }

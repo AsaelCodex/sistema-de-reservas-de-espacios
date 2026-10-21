@@ -94,6 +94,92 @@ public class ResolucionSolicitudServiceTests
         Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    [Theory]
+    [Trait("Requerimiento", "RF-GP-04")]
+    [Trait("Requerimiento", "RD-07")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Rechazar_WithoutMotivo_DoesNotCompleteRejection(string? motivo)
+    {
+        var solicitud = await CrearSolicitudAsync(EstadoSolicitudPermiso.Pendiente);
+
+        var resultado = await _servicio.RechazarAsync(solicitud.Id, Guid.NewGuid(), motivo);
+
+        Assert.Equal(EstadoResolucionSolicitud.MotivoAusente, resultado.Estado);
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        Assert.Equal(EstadoSolicitudPermiso.Pendiente, guardada.Estado);
+        Assert.Null(guardada.MotivoRechazo);
+        Assert.Null(guardada.AprobadorId);
+        Assert.Null(guardada.ResueltaEn);
+        // RF-GP-05: un rechazo (completo o no) nunca crea permiso otorgado.
+        Assert.Empty(_permisosOtorgados.Permisos);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-04")]
+    public async Task Rechazar_WithMotivo_PersistsRejectionAndReason()
+    {
+        var solicitud = await CrearSolicitudAsync(EstadoSolicitudPermiso.Pendiente);
+        var rechazador = Guid.NewGuid();
+        var antes = DateTime.UtcNow;
+
+        var resultado = await _servicio.RechazarAsync(
+            solicitud.Id, rechazador, "  Fuera del horario asignado.  ");
+
+        Assert.Equal(EstadoResolucionSolicitud.Rechazada, resultado.Estado);
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        Assert.Equal(EstadoSolicitudPermiso.Rechazada, guardada.Estado);
+        Assert.Equal("Fuera del horario asignado.", guardada.MotivoRechazo);
+        // AprobadorId es el resolutor del esquema oficial: aquí, el rechazador.
+        Assert.Equal(rechazador, guardada.AprobadorId);
+        Assert.NotNull(guardada.ResueltaEn);
+        Assert.InRange(guardada.ResueltaEn!.Value, antes, DateTime.UtcNow.AddMinutes(1));
+        Assert.Empty(_permisosOtorgados.Permisos);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-06")]
+    public async Task Rechazar_AppliedRequest_IsRejectedAndKeepsState()
+    {
+        var solicitud = await CrearSolicitudAsync(EstadoSolicitudPermiso.Aplicada);
+
+        var resultado = await _servicio.RechazarAsync(
+            solicitud.Id, Guid.NewGuid(), "motivo tardío");
+
+        Assert.Equal(EstadoResolucionSolicitud.TransicionProhibida, resultado.Estado);
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        Assert.Equal(EstadoSolicitudPermiso.Aplicada, guardada.Estado);
+        Assert.Null(guardada.MotivoRechazo);
+        Assert.Null(guardada.AprobadorId);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-06")]
+    public async Task Rechazar_Twice_KeepsFirstRejectionAndMotivo()
+    {
+        var solicitud = await CrearSolicitudAsync(EstadoSolicitudPermiso.Pendiente);
+        await _servicio.RechazarAsync(solicitud.Id, Guid.NewGuid(), "primer motivo");
+
+        var segunda = await _servicio.RechazarAsync(
+            solicitud.Id, Guid.NewGuid(), "segundo motivo");
+
+        Assert.Equal(EstadoResolucionSolicitud.TransicionProhibida, segunda.Estado);
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        Assert.Equal(EstadoSolicitudPermiso.Rechazada, guardada.Estado);
+        Assert.Equal("primer motivo", guardada.MotivoRechazo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Rechazar_WithUnknownSolicitud_ReturnsNotFound()
+    {
+        var resultado = await _servicio.RechazarAsync(
+            Guid.NewGuid(), Guid.NewGuid(), "motivo válido");
+
+        Assert.Equal(EstadoResolucionSolicitud.SolicitudNoEncontrada, resultado.Estado);
+    }
+
     private async Task<SolicitudPermiso> CrearSolicitudAsync(EstadoSolicitudPermiso estado)
     {
         var solicitud = new SolicitudPermiso
