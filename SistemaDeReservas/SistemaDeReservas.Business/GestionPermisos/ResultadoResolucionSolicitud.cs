@@ -8,7 +8,8 @@ public enum EstadoResolucionSolicitud
     TransicionProhibida,
     SolicitudNoEncontrada,
     Rechazada,
-    MotivoAusente
+    MotivoAusente,
+    ResolucionPropia
 }
 
 public sealed record ResultadoResolucionSolicitud(
@@ -46,5 +47,11 @@ public sealed record ResultadoResolucionSolicitud(
         new(
             EstadoResolucionSolicitud.MotivoAusente,
             "El rechazo requiere un motivo escrito.",
+            null);
+
+    public static ResultadoResolucionSolicitud ResolucionPropia() =>
+        new(
+            EstadoResolucionSolicitud.ResolucionPropia,
+            "Un administrador no puede aprobar ni rechazar su propia solicitud.",
             null);
 }

@@ -22,6 +22,12 @@ public class ResolucionSolicitudService
             return ResultadoResolucionSolicitud.SolicitudNoEncontrada();
         }
 
+        // RF-GP-07: nadie resuelve su propia solicitud, ni aprobando…
+        if (solicitud.SolicitanteId == aprobadorId)
+        {
+            return ResultadoResolucionSolicitud.ResolucionPropia();
+        }
+
         // RF-GP-06: la tabla centralizada decide antes de tocar el estado.
         // Una solicitud Rechazada no avanza y una Aplicada no se aprueba otra vez.
         if (!TransicionesSolicitudPermiso.EsValida(
@@ -77,6 +83,12 @@ public class ResolucionSolicitudService
         if (solicitud is null)
         {
             return ResultadoResolucionSolicitud.SolicitudNoEncontrada();
+        }
+
+        // RF-GP-07: …ni rechazando su propia solicitud.
+        if (solicitud.SolicitanteId == rechazadorId)
+        {
+            return ResultadoResolucionSolicitud.ResolucionPropia();
         }
 
         // RF-GP-06: la tabla centralizada decide antes de tocar el estado:
