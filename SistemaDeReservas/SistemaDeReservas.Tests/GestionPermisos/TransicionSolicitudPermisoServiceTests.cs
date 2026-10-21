@@ -6,7 +6,8 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 
 public class TransicionSolicitudPermisoServiceTests
 {
-    private readonly FakeSolicitudPermisoRepository _solicitudes = new();
+    private readonly FakeSolicitudPermisoRepository _solicitudes =
+        new(new FakePermisoOtorgadoRepository());
     private readonly TransicionSolicitudPermisoService _servicio;
 
     public TransicionSolicitudPermisoServiceTests()
@@ -28,7 +29,7 @@ public class TransicionSolicitudPermisoServiceTests
         var resultado = await _servicio.TransicionarAsync(solicitud.Id, destino);
 
         Assert.Equal(EstadoTransicionSolicitud.Transicionada, resultado.Estado);
-        Assert.Equal(destino, solicitud.Estado);
+        // El repositorio devuelve copias (como la BD): lo que importa es lo persistido.
         Assert.Equal(destino, (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!.Estado);
     }
 

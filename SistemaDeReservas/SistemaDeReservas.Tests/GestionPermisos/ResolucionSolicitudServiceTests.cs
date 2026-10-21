@@ -6,13 +6,13 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 
 public class ResolucionSolicitudServiceTests
 {
-    private readonly FakeSolicitudPermisoRepository _solicitudes = new();
+    private readonly FakeSolicitudPermisoRepository _solicitudes =
+        new(new FakePermisoOtorgadoRepository());
     private readonly ResolucionSolicitudService _servicio;
 
     public ResolucionSolicitudServiceTests()
     {
-        _servicio = new ResolucionSolicitudService(
-            _solicitudes, new FakePermisoOtorgadoRepository());
+        _servicio = new ResolucionSolicitudService(_solicitudes);
     }
 
     [Fact]

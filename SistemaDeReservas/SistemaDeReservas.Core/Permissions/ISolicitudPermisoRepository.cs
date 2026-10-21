@@ -21,4 +21,11 @@ public interface ISolicitudPermisoRepository
         CancellationToken cancellationToken = default);
 
     Task ActualizarAsync(SolicitudPermiso solicitud, CancellationToken cancellationToken = default);
+
+    // Persiste la solicitud resuelta y su permiso otorgado juntos: o se guardan
+    // las dos cosas o no se guarda ninguna (consistencia RF-GP-05).
+    Task GuardarResolucionAsync(
+        SolicitudPermiso solicitud,
+        PermisoOtorgado permiso,
+        CancellationToken cancellationToken = default);
 }

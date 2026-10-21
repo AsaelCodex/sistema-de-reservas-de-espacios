@@ -67,4 +67,16 @@ public class SolicitudPermisoRepository : ISolicitudPermisoRepository
         _context.SolicitudesPermiso.Update(solicitud);
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task GuardarResolucionAsync(
+        SolicitudPermiso solicitud,
+        PermisoOtorgado permiso,
+        CancellationToken cancellationToken = default)
+    {
+        _context.SolicitudesPermiso.Update(solicitud);
+        _context.PermisosOtorgados.Add(permiso);
+        // Un solo SaveChanges: EF ejecuta todo en una transacción, así que la
+        // solicitud y el permiso se persisten juntos o no persiste ninguno.
+        await _context.SaveChangesAsync(cancellationToken);
+    }
 }

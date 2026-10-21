@@ -7,15 +7,16 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 
 public class AprobarAplicaPermisoTests
 {
-    private readonly FakeSolicitudPermisoRepository _solicitudes = new();
     private readonly FakePermisoOtorgadoRepository _permisosOtorgados = new();
+    private readonly FakeSolicitudPermisoRepository _solicitudes;
     private readonly FakeUsuarioRepository _usuarios = new();
     private readonly ResolucionSolicitudService _resolucion;
     private readonly AutorizacionPermisosService _autorizacion;
 
     public AprobarAplicaPermisoTests()
     {
-        _resolucion = new ResolucionSolicitudService(_solicitudes, _permisosOtorgados);
+        _solicitudes = new FakeSolicitudPermisoRepository(_permisosOtorgados);
+        _resolucion = new ResolucionSolicitudService(_solicitudes);
         _autorizacion = new AutorizacionPermisosService(_usuarios, _permisosOtorgados);
     }
 
@@ -74,6 +75,36 @@ public class AprobarAplicaPermisoTests
         var resultado = await _resolucion.AprobarAsync(solicitud.Id, Guid.NewGuid());
 
         Assert.Equal(EstadoResolucionSolicitud.TransicionProhibida, resultado.Estado);
+        Assert.Single(_permisosOtorgados.Permisos);
+    }
+
+    // Consistencia RF-GP-05: si el permiso no puede guardarse (por ejemplo, por
+    // la restricción única de la base de datos), la solicitud no cambia de
+    // estado. Antes cada escritura era un SaveChanges separado y podía quedar
+    // una solicitud Aplicada sin permiso.
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-05")]
+    public async Task Aprobar_WhenGrantCannotBeStored_PersistsNoChangesAtAll()
+    {
+        var solicitante = await CrearUsuarioAsync();
+        var solicitud = await CrearSolicitudAsync(solicitante.Id);
+        // Anomalía previa: ya existe el grant para ese usuario y permiso.
+        await _permisosOtorgados.AgregarAsync(new PermisoOtorgado
+        {
+            Id = Guid.NewGuid(),
+            UsuarioId = solicitante.Id,
+            Permiso = Permiso.CrearReserva,
+            SolicitudPermisoId = solicitud.Id,
+            OtorgadoEn = DateTime.UtcNow
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _resolucion.AprobarAsync(solicitud.Id, Guid.NewGuid()));
+
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        Assert.Equal(EstadoSolicitudPermiso.Pendiente, guardada.Estado);
+        Assert.Null(guardada.AprobadorId);
+        Assert.Null(guardada.ResueltaEn);
         Assert.Single(_permisosOtorgados.Permisos);
     }
 

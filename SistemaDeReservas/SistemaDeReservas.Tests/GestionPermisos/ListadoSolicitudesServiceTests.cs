@@ -6,7 +6,8 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 
 public class ListadoSolicitudesServiceTests
 {
-    private readonly FakeSolicitudPermisoRepository _solicitudes = new();
+    private readonly FakeSolicitudPermisoRepository _solicitudes =
+        new(new FakePermisoOtorgadoRepository());
     private readonly ListadoSolicitudesService _servicio;
 
     public ListadoSolicitudesServiceTests()
