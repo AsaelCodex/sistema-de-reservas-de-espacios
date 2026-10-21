@@ -56,9 +56,14 @@ public class AppDbContext : DbContext
             otorgado.HasOne(o => o.Usuario)
                 .WithMany()
                 .HasForeignKey(o => o.UsuarioId);
+            // Restrict: Usuarios ya llega a PermisosOtorgados por cascada; si esta
+            // FK también fuera cascada, SQL Server rechaza la migración por
+            // múltiples rutas de cascada (error 1785). Además, borrar una
+            // solicitud no debe borrar el permiso ya aplicado.
             otorgado.HasOne(o => o.SolicitudPermiso)
                 .WithMany()
-                .HasForeignKey(o => o.SolicitudPermisoId);
+                .HasForeignKey(o => o.SolicitudPermisoId)
+                .OnDelete(DeleteBehavior.Restrict);
             otorgado.HasIndex(o => new { o.UsuarioId, o.Permiso })
                 .IsUnique();
         });

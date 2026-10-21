@@ -29,7 +29,7 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                         column: x => x.SolicitudPermisoId,
                         principalTable: "SolicitudesPermiso",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_PermisosOtorgados_Usuarios_UsuarioId",
                         column: x => x.UsuarioId,

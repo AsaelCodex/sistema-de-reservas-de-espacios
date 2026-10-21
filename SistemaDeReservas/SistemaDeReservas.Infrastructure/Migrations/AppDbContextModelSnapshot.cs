@@ -299,7 +299,7 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.HasOne("SistemaDeReservas.Core.Permissions.SolicitudPermiso", "SolicitudPermiso")
                         .WithMany()
                         .HasForeignKey("SolicitudPermisoId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("SistemaDeReservas.Core.Users.Usuario", "Usuario")

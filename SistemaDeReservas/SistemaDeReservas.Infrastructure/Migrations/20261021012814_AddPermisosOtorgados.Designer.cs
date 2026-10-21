@@ -12,7 +12,7 @@ using SistemaDeReservas.Infrastructure.Data;
 namespace SistemaDeReservas.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261020232629_AddPermisosOtorgados")]
+    [Migration("20261021012814_AddPermisosOtorgados")]
     partial class AddPermisosOtorgados
     {
         /// <inheritdoc />
@@ -302,7 +302,7 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.HasOne("SistemaDeReservas.Core.Permissions.SolicitudPermiso", "SolicitudPermiso")
                         .WithMany()
                         .HasForeignKey("SolicitudPermisoId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("SistemaDeReservas.Core.Users.Usuario", "Usuario")
