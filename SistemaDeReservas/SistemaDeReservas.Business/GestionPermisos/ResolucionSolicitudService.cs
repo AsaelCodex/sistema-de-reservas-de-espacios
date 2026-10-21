@@ -35,9 +35,11 @@ public class ResolucionSolicitudService
 
         // Aprobada se atraviesa dentro de esta misma operación (D-GP-06):
         // se registra quién aprobó y cuándo, y el sistema la aplica de inmediato.
+        // RD-11: la solicitud y su permiso otorgado registran la misma hora.
+        var resueltaEn = DateTime.UtcNow;
         solicitud.Estado = EstadoSolicitudPermiso.Aprobada;
         solicitud.AprobadorId = aprobadorId;
-        solicitud.ResueltaEn = DateTime.UtcNow;
+        solicitud.ResueltaEn = resueltaEn;
         solicitud.Estado = EstadoSolicitudPermiso.Aplicada;
 
         // RF-GP-05: aprobar otorga el permiso solicitado. Solicitud y permiso se
@@ -49,7 +51,7 @@ public class ResolucionSolicitudService
             UsuarioId = solicitud.SolicitanteId,
             Permiso = solicitud.Permiso,
             SolicitudPermisoId = solicitud.Id,
-            OtorgadoEn = DateTime.UtcNow
+            OtorgadoEn = resueltaEn
         }, cancellationToken);
 
         return ResultadoResolucionSolicitud.Aprobada(solicitud);

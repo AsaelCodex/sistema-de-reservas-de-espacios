@@ -108,6 +108,23 @@ public class AprobarAplicaPermisoTests
         Assert.Single(_permisosOtorgados.Permisos);
     }
 
+    // RD-11: dos registros creados en el mismo instante (la solicitud resuelta y
+    // su permiso otorgado) muestran exactamente la misma hora.
+    [Fact]
+    [Trait("Requerimiento", "RD-11")]
+    public async Task Aprobar_RecordsSameTimestampForRequestAndGrant()
+    {
+        var solicitante = await CrearUsuarioAsync();
+        var solicitud = await CrearSolicitudAsync(solicitante.Id);
+
+        await _resolucion.AprobarAsync(solicitud.Id, Guid.NewGuid());
+
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        var otorgado = Assert.Single(_permisosOtorgados.Permisos);
+        Assert.NotNull(guardada.ResueltaEn);
+        Assert.Equal(guardada.ResueltaEn, otorgado.OtorgadoEn);
+    }
+
     private async Task<Usuario> CrearUsuarioAsync()
     {
         var usuario = new Usuario
