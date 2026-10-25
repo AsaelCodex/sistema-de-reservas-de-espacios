@@ -36,8 +36,8 @@ módulo de reservas.
   RF-CA-22) y la máquina de estados del negocio (RF-NEG-03, RF-NEG-04,
   RF-NEG-05 y RF-NEG-09). El detalle y la evidencia están en
   `docs/matriz-requisitos.md`.
-- **Pruebas:** 268, todas en verde: 261 unitarias con fakes (no necesitan
-  base de datos) y 7 de persistencia sobre SQL Server LocalDB
+- **Pruebas:** 303, todas en verde: 294 unitarias con fakes (no necesitan
+  base de datos) y 9 de persistencia sobre SQL Server LocalDB
   (`SistemaDeReservas.Tests/Persistencia`), con una base propia por
   prueba que se elimina al terminar.
 - **Endpoints:**
@@ -75,8 +75,8 @@ módulo de reservas.
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` debe mostrar 10.x)
 - Git
 - SQL Server (LocalDB, Express o superior) para ejecutar la API y para
-  las 7 pruebas de persistencia (si no está disponible, esas pruebas se
-  omiten con el motivo; ver «Cómo ejecutar las pruebas»)
+  las 9 pruebas de persistencia (si no está disponible, esas pruebas se
+  omiten con el motivo; ver «Pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
 
@@ -160,43 +160,78 @@ Comprobar el funcionamiento:
 3. Consultar `GET /api/correos` como Administrador: el correo aparece
    con estado `Enviado`, `FechaEnvio` y `Intentos = 0`.
 
-## Cómo ejecutar las pruebas
+## Pruebas
+
+Desde la raíz del repositorio, un único comando ejecuta toda la suite:
 
 ```powershell
 dotnet test SistemaDeReservas/SistemaDeReservas.sln
 ```
 
-Resultado esperado: **268/268** en verde. Cada prueba declara el
+Resultado actual (ejecutado en esta rama): **303/303 en verde** —
+303 ejecutadas, **0 fallidas**, **0 omitidas**. Cada prueba declara el
 requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]`,
 `[Trait("Requerimiento", "RF-GP-XX")]`,
 `[Trait("Requerimiento", "RF-NOT-XX")]`,
 `[Trait("Requerimiento", "RF-NEG-XX")]` o
 `[Trait("Requerimiento", "RD-XX")]`.
 
-261 pruebas son unitarias: no necesitan base de datos ni servidor
-(usan fakes y un hasheador real de prueba). Las 7 de persistencia
+294 pruebas son unitarias: no necesitan base de datos ni servidor
+(usan fakes y un hasheador real de prueba). Las 9 de persistencia
 (`SistemaDeReservas.Tests/Persistencia`, RD-09) sí requieren SQL Server
 LocalDB:
 
 ```powershell
-# solo las 7 pruebas de persistencia
+# solo las 9 pruebas de persistencia
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo las 261 unitarias
+# solo las 294 unitarias
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
+
+Cómo interpretar el resumen que imprime `dotnet test`:
+
+- **Ejecutadas**: total de pruebas descubiertas (303).
+- **Fallidas** (`Con error`): pruebas que no cumplieron su aserción; en
+  una suite sana deben ser 0.
+- **Omitidas**: pruebas que no corrieron. Aquí solo aparecen las 9 de
+  persistencia cuando LocalDB no está disponible; con LocalDB disponible
+  la ejecución es de 303 ejecutadas / 0 omitidas, y sin LocalDB queda en
+  294 ejecutadas / 9 omitidas / 0 fallidas.
 
 - Cada prueba de persistencia crea su propia base `Reservas_Tests_*` en
   LocalDB, aplica las migraciones sobre una base vacía y la elimina al
   terminar (también cuando la prueba falla); tras la corrida no queda
   ninguna base temporal.
-- Sin LocalDB, esas 7 pruebas se **omiten** con el motivo. Para exigir
+- Sin LocalDB, esas 9 pruebas se **omiten** con el motivo. Para exigir
   su ejecución (p. ej. en CI), definir `REQUIERE_PERSISTENCIA=1`: la
   ausencia de LocalDB **falla** las pruebas con un mensaje claro en vez
   de omitirlas.
 - `LOCALDB_PROBE_DATASOURCE` solo altera la sonda de disponibilidad
   (sirve para verificar los dos comportamientos anteriores); la creación
   de bases siempre usa `(localdb)\MSSQLLocalDB`.
+
+## Defectos
+
+La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada
+contra los seis defectos de la variante A de la Práctica 2: cada uno se
+introdujo temporalmente sobre el código correcto, uno por uno, sin tocar
+las pruebas, y la ejecución registró los fallos indicados. El código
+correcto quedó restaurado y la suite volvió a 303/303. El detalle está en
+`docs/practica-2-suite-permisos.md`.
+
+| # | Defecto | Prueba que lo detecta | Comportamiento que comprueba |
+|---|---|---|---|
+| A1 | `AprobarAsync` cambia la condición «el estado es Pendiente» por «el estado no es Rechazada» | `ResolucionSolicitudServiceTests.Aprobar_FromApprovedRequest_IsRejectedAndKeepsFirstApproval` (y 4 más, incluida `PutAprobar_AppliedRequest_ReturnsConflict`) | Aprobar desde `Aprobada` o `Aplicada` se rechaza (`TransicionProhibida`) conservando estado, primer aprobador, fecha y permisos; no nace un segundo permiso. |
+| A2 | Se agrega `Rechazada → Aplicada` a las transiciones permitidas | `TransicionesSolicitudPermisoTests.EsValida_WithCombinationOutsideTable_DeniesIt(Rechazada, Aplicada)` (junto con `Transicionar_WithCombinationOutsideTable…` y `ResolvedStates_HaveNoOutgoingTransitions`) | `Rechazada` es estado final: la combinación se rechaza y el estado no cambia. |
+| A3 | Se elimina la verificación que impide resolver la propia solicitud | `ResolucionPropiaTests.Aprobar_OwnRequest_IsRejectedWithoutChanges` y `…Rechazar_OwnRequest_IsRejectedWithoutChanges` (más las dos pruebas de API que esperan 403) | Un Administrador no puede aprobar ni rechazar su propia solicitud: `ResolucionPropia` / 403, sin estado, motivo, fecha ni permisos nuevos. |
+| A4 | En el listado propio se invierte «el solicitante es quien consulta» a «no es quien consulta» | `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests` | Con dos solicitantes, el listado propio devuelve las 3 solicitudes del usuario y excluye las 2 ajenas (filtro en el repositorio EF real). |
+| A5 | Se agrega `Aprobada → Pendiente` a las transiciones permitidas | `TransicionesSolicitudPermisoTests.EsValida_WithCombinationOutsideTable_DeniesIt(Aprobada, Pendiente)` (junto con `Transicionar_WithCombinationOutsideTable…`) | `Aprobada → Pendiente` se rechaza y conserva el estado. |
+| A6 | Se elimina el guardado del motivo en la operación de rechazo | `ResolucionSolicitudServiceTests.Rechazar_WithMotivo_PersistsRejectionAndReason` (y 3 más, incluida la prueba de persistencia) | El rechazo válido guarda el motivo (recortado) junto al resolutor y la fecha; el inválido no resuelve la solicitud. |
+
+Nota sobre A4: su mutación vive en `SolicitudPermisoRepository`, que solo
+se ejercita con LocalDB; sin LocalDB esa prueba se omite y el defecto no
+se detectaría.
 
 ## Documentación
 
@@ -206,5 +241,7 @@ dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName
 - `docs/maquina-estados-negocio.md`: estados y transiciones de la
   reserva (RF-NEG-03 a RF-NEG-05).
 - `docs/bitacora-asignación-1.md`: bitácora del proyecto.
+- `docs/practica-2-suite-permisos.md`: Práctica 2 — suite de Gestión de
+  permisos: relación RF-GP ↔ pruebas, defectos detectados y resultados.
 - `AGENTS.md`: convenciones del proyecto (estructura, seguridad,
   commits y pull requests).
