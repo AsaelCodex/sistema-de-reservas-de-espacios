@@ -38,6 +38,7 @@ public class SolicitudesPermisosTests
         _filtro = new AutorizacionRolFilter(sesion);
     }
 
+    // RF-GP-01: un Estándar crea la solicitud por API y esta nace Pendiente.
     [Fact]
     [Trait("Requerimiento", "RF-GP-01")]
     public async Task Post_AsEstandarUser_CreatesPendingRequest()
@@ -59,6 +60,7 @@ public class SolicitudesPermisosTests
         Assert.Contains("Pendiente", JsonSerializer.Serialize(respuesta.Value));
     }
 
+    // RF-GP-01: el Administrador también puede crear solicitudes (201).
     [Fact]
     [Trait("Requerimiento", "RF-GP-01")]
     public async Task Post_AsAdministrator_IsAlsoAllowed()
@@ -141,6 +143,8 @@ public class SolicitudesPermisosTests
         Assert.Equal(NivelOperacion.Autenticado, nivel);
     }
 
+    // RF-GP-02: el Administrador consulta la cola de pendientes y no ve las
+    // solicitudes ya resueltas.
     [Fact]
     [Trait("Requerimiento", "RF-GP-02")]
     public async Task GetPendientes_AsAdministrator_ReturnsOnlyPendingRequests()
@@ -206,6 +210,8 @@ public class SolicitudesPermisosTests
         Assert.Equal(NivelOperacion.Administrador, nivel);
     }
 
+    // RF-GP-02: el Estándar solo ve sus propias solicitudes; las de otro
+    // solicitante no aparecen en la respuesta.
     [Fact]
     [Trait("Requerimiento", "RF-GP-02")]
     public async Task GetMias_AsEstandarUser_ReturnsOnlyOwnRequests()
@@ -246,6 +252,8 @@ public class SolicitudesPermisosTests
         Assert.Equal(NivelOperacion.Autenticado, nivel);
     }
 
+    // RF-GP-03 / RF-GP-05: aprobar por API registra aprobador y fecha, deja la
+    // solicitud Aplicada y crea el permiso del solicitante.
     [Fact]
     [Trait("Requerimiento", "RF-GP-03")]
     [Trait("Requerimiento", "RF-GP-05")]
@@ -272,6 +280,8 @@ public class SolicitudesPermisosTests
         Assert.Equal(solicitante.Id, _permisosOtorgados.Permisos.Single().UsuarioId);
     }
 
+    // RF-GP-07: aprobar la propia solicitud devuelve 403 y no cambia nada; el
+    // otro Administrador sí puede aprobarla.
     [Fact]
     [Trait("Requerimiento", "RF-GP-07")]
     public async Task PutAprobar_OwnRequest_ReturnsForbiddenAndOtherAdminCanApprove()
@@ -300,6 +310,7 @@ public class SolicitudesPermisosTests
         Assert.Equal(EstadoSolicitudPermiso.Aplicada, _solicitudes.Solicitudes.Single().Estado);
     }
 
+    // RF-GP-06: la segunda aprobación devuelve 409 y no añade otro permiso.
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
     public async Task PutAprobar_AppliedRequest_ReturnsConflict()
@@ -372,6 +383,8 @@ public class SolicitudesPermisosTests
         Assert.Equal(NivelOperacion.Administrador, nivel);
     }
 
+    // RF-GP-04: el rechazo con motivo válido lo guarda con el resolutor y la
+    // fecha, y no crea permiso.
     [Fact]
     [Trait("Requerimiento", "RF-GP-04")]
     public async Task PutRechazar_AsAdministrator_RejectsWithMotivo()
@@ -398,6 +411,8 @@ public class SolicitudesPermisosTests
         Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-04: un motivo de solo espacios devuelve 400 y la solicitud sigue
+    // Pendiente, sin resolver.
     [Fact]
     [Trait("Requerimiento", "RF-GP-04")]
     [Trait("Requerimiento", "RD-07")]
@@ -421,6 +436,8 @@ public class SolicitudesPermisosTests
         Assert.Null(guardada.AprobadorId);
     }
 
+    // RF-GP-07: rechazar la propia solicitud devuelve 403 y no cambia nada; el
+    // otro Administrador sí puede rechazarla.
     [Fact]
     [Trait("Requerimiento", "RF-GP-07")]
     public async Task PutRechazar_OwnRequest_ReturnsForbiddenAndOtherAdminCanReject()

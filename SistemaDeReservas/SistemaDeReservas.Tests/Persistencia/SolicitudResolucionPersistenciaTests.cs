@@ -13,6 +13,8 @@ namespace SistemaDeReservas.Tests.Persistencia;
 [Collection(ColeccionPersistencia.NombreColeccionPersistencia)]
 public class SolicitudResolucionPersistenciaTests : BasePruebaPersistencia
 {
+    // RF-GP-03 / RF-GP-05 / RD-09: la aprobación (aprobador, fecha y permiso)
+    // queda en SQL Server y se lee con un contexto nuevo e independiente.
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-GP-03")]
@@ -46,6 +48,8 @@ public class SolicitudResolucionPersistenciaTests : BasePruebaPersistencia
         Assert.False(await PuedeAsync(otro.Id, Permiso.CrearReserva));
     }
 
+    // RF-GP-06: la segunda aprobación se rechaza y en la base solo queda un
+    // permiso con el primer aprobador.
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-GP-06")]
@@ -73,6 +77,8 @@ public class SolicitudResolucionPersistenciaTests : BasePruebaPersistencia
         Assert.Single(grants);
     }
 
+    // RF-GP-05 / RF-GP-06: una solicitud Rechazada no se aprueba y en la base
+    // no nace ningún permiso otorgado.
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-GP-05")]
@@ -99,6 +105,8 @@ public class SolicitudResolucionPersistenciaTests : BasePruebaPersistencia
         Assert.False(await PuedeAsync(solicitante.Id, Permiso.CrearReserva));
     }
 
+    // RF-GP-04: el motivo del rechazo vive en SQL Server junto al resolutor y
+    // la fecha; el rechazo no otorga permiso.
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-GP-04")]

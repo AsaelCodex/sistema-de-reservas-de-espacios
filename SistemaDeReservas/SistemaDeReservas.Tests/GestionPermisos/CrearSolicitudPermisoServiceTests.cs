@@ -16,6 +16,8 @@ public class CrearSolicitudPermisoServiceTests
         _servicio = new CrearSolicitudPermisoService(_solicitudes, _permisosOtorgados);
     }
 
+    // RF-GP-01: un usuario Estándar crea la solicitud y esta nace Pendiente,
+    // sin aprobador ni fecha de resolución.
     [Fact]
     [Trait("Requerimiento", "RF-GP-01")]
     public async Task Crear_WithKnownPermiso_CreatesRequestInPendingState()

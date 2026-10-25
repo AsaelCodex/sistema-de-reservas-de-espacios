@@ -15,6 +15,7 @@ public class TransicionSolicitudPermisoServiceTests
         _servicio = new TransicionSolicitudPermisoService(_solicitudes);
     }
 
+    // RF-GP-06: las tres transiciones oficiales cambian y persisten el estado.
     [Theory]
     [InlineData(EstadoSolicitudPermiso.Pendiente, EstadoSolicitudPermiso.Aprobada)]
     [InlineData(EstadoSolicitudPermiso.Pendiente, EstadoSolicitudPermiso.Rechazada)]
@@ -47,6 +48,8 @@ public class TransicionSolicitudPermisoServiceTests
     [InlineData(EstadoSolicitudPermiso.Aplicada, EstadoSolicitudPermiso.Aprobada)]
     [InlineData(EstadoSolicitudPermiso.Aplicada, EstadoSolicitudPermiso.Rechazada)]
     [InlineData(EstadoSolicitudPermiso.Aplicada, EstadoSolicitudPermiso.Aplicada)]
+    // RF-GP-06: cada combinación fuera de la tabla se rechaza y conserva el
+    // estado original; incluye Rechazada → Aplicada y Aprobada → Pendiente.
     [Trait("Requerimiento", "RF-GP-06")]
     public async Task Transicionar_WithCombinationOutsideTable_IsRejectedAndKeepsState(
         EstadoSolicitudPermiso origen,
@@ -62,6 +65,7 @@ public class TransicionSolicitudPermisoServiceTests
         Assert.Equal(origen, (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!.Estado);
     }
 
+    // RF-GP-06: Aprobada → Aprobada no existe; el segundo intento no cambia nada.
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
     public async Task Transicionar_ApprovedTwice_SecondAttemptIsRejectedAndKeepsState()

@@ -14,6 +14,7 @@ namespace SistemaDeReservas.Tests.Persistencia;
 [Collection(ColeccionPersistencia.NombreColeccionPersistencia)]
 public class PermisoOtorgadoPersistenciaTests : BasePruebaPersistencia
 {
+    // RF-GP-05 / RD-07: pedir un permiso ya otorgado no crea otra fila.
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-GP-05")]
@@ -38,6 +39,8 @@ public class PermisoOtorgadoPersistenciaTests : BasePruebaPersistencia
         Assert.Equal(solicitudPrevia.Id, unica.Id);
     }
 
+    // RF-GP-05: si el permiso no se puede guardar, la aprobación no persiste
+    // ningún cambio (estado, aprobador, fecha ni permiso).
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-GP-05")]
@@ -85,6 +88,8 @@ public class PermisoOtorgadoPersistenciaTests : BasePruebaPersistencia
         Assert.Equal(guardada.ResueltaEn, otorgado.OtorgadoEn);
     }
 
+    // RF-GP-05: la base real tiene el índice único (UsuarioId, Permiso) y lo
+    // hace cumplir, de modo que un duplicado se rechaza.
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-GP-05")]
