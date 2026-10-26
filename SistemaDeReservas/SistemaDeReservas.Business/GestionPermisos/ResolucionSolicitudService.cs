@@ -106,7 +106,6 @@ public class ResolucionSolicitudService
         solicitud.Estado = EstadoSolicitudPermiso.Rechazada;
         solicitud.AprobadorId = rechazadorId;
         solicitud.ResueltaEn = DateTime.UtcNow;
-        solicitud.MotivoRechazo = motivo.Trim();
 
         await _solicitudes.ActualizarAsync(solicitud, cancellationToken);
 
