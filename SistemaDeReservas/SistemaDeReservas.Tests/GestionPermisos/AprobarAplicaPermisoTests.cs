@@ -20,6 +20,8 @@ public class AprobarAplicaPermisoTests
         _autorizacion = new AutorizacionPermisosService(_usuarios, _permisosOtorgados);
     }
 
+    // RF-GP-05: al aprobar la solicitud queda Aplicada y el permiso solicitado
+    // está efectivo de inmediato, sin ninguna intervención adicional.
     [Fact]
     [Trait("Requerimiento", "RF-GP-05")]
     public async Task Aprobar_GrantsPermissionSoApplicantCanActWithoutFurtherSteps()
@@ -31,9 +33,13 @@ public class AprobarAplicaPermisoTests
         var resultado = await _resolucion.AprobarAsync(solicitud.Id, Guid.NewGuid());
 
         Assert.Equal(EstadoResolucionSolicitud.Aprobada, resultado.Estado);
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        Assert.Equal(EstadoSolicitudPermiso.Aplicada, guardada.Estado);
         Assert.True(await _autorizacion.PuedeAsync(solicitante.Id, Permiso.CrearReserva));
     }
 
+    // RF-GP-05: el permiso otorgado queda registrado con su solicitante, su
+    // permiso y su solicitud de origen.
     [Fact]
     [Trait("Requerimiento", "RF-GP-05")]
     public async Task Aprobar_RegistersGrantWithItsOrigin()
@@ -51,6 +57,7 @@ public class AprobarAplicaPermisoTests
         Assert.InRange(otorgado.OtorgadoEn, antes, DateTime.UtcNow.AddMinutes(1));
     }
 
+    // RF-GP-05: el permiso es del solicitante; ningún otro usuario lo recibe.
     [Fact]
     [Trait("Requerimiento", "RF-GP-05")]
     public async Task Aprobar_DoesNotGrantPermissionToOtherUsers()
@@ -64,6 +71,7 @@ public class AprobarAplicaPermisoTests
         Assert.False(await _autorizacion.PuedeAsync(otro.Id, Permiso.CrearReserva));
     }
 
+    // RF-GP-06: la segunda aprobación se rechaza y no nace un segundo permiso.
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
     public async Task Aprobar_Twice_DoesNotCreateASecondGrant()
@@ -78,7 +86,7 @@ public class AprobarAplicaPermisoTests
         Assert.Single(_permisosOtorgados.Permisos);
     }
 
-    // Consistencia RF-GP-05: si el permiso no puede guardarse (por ejemplo, por
+    // RF-GP-05: si el permiso no puede guardarse (por ejemplo, por
     // la restricción única de la base de datos), la solicitud no cambia de
     // estado. Antes cada escritura era un SaveChanges separado y podía quedar
     // una solicitud Aplicada sin permiso.

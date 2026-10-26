@@ -15,6 +15,7 @@ public class ListadoSolicitudesServiceTests
         _servicio = new ListadoSolicitudesService(_solicitudes);
     }
 
+    // RF-GP-02: la consulta de pendientes solo devuelve solicitudes Pendientes.
     [Fact]
     [Trait("Requerimiento", "RF-GP-02")]
     public async Task ListarPendientes_ReturnsOnlyPendingRequests()
@@ -32,6 +33,7 @@ public class ListadoSolicitudesServiceTests
             Assert.Equal(EstadoSolicitudPermiso.Pendiente, solicitud.Estado));
     }
 
+    // RF-GP-02: la cola vacía devuelve una lista vacía.
     [Fact]
     [Trait("Requerimiento", "RF-GP-02")]
     public async Task ListarPendientes_WithNoRequests_ReturnsEmpty()
@@ -41,6 +43,8 @@ public class ListadoSolicitudesServiceTests
         Assert.Empty(resultado);
     }
 
+    // RF-GP-02: el listado propio de un Estándar contiene sus solicitudes y
+    // excluye las de otros solicitantes (dos solicitantes en la misma prueba).
     [Fact]
     [Trait("Requerimiento", "RF-GP-02")]
     public async Task ListarPropias_NeverIncludesOtherUsersRequests()

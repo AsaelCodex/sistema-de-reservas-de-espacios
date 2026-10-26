@@ -16,6 +16,8 @@ public class ResolucionPropiaTests
         _servicio = new ResolucionSolicitudService(_solicitudes);
     }
 
+    // RF-GP-07: un Administrador no puede aprobar su propia solicitud; la fila
+    // queda sin resolver y sin permisos nuevos.
     [Fact]
     [Trait("Requerimiento", "RF-GP-07")]
     public async Task Aprobar_OwnRequest_IsRejectedWithoutChanges()
@@ -34,6 +36,8 @@ public class ResolucionPropiaTests
         Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-07: tampoco puede rechazar su propia solicitud; sigue Pendiente,
+    // sin motivo, sin resolutor y sin permisos nuevos.
     [Fact]
     [Trait("Requerimiento", "RF-GP-07")]
     public async Task Rechazar_OwnRequest_IsRejectedWithoutChanges()
@@ -50,8 +54,11 @@ public class ResolucionPropiaTests
         Assert.Null(guardada.MotivoRechazo);
         Assert.Null(guardada.AprobadorId);
         Assert.Null(guardada.ResueltaEn);
+        Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-07: la regla compara resolutor y solicitante, no el rol; otro
+    // Administrador sí puede resolver la solicitud.
     [Fact]
     [Trait("Requerimiento", "RF-GP-07")]
     public async Task Aprobar_RequestOfAnotherAdministrator_IsAllowed()

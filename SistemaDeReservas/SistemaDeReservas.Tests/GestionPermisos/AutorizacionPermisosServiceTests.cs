@@ -16,6 +16,7 @@ public class AutorizacionPermisosServiceTests
         _servicio = new AutorizacionPermisosService(_usuarios, _permisosOtorgados);
     }
 
+    // RF-GP-05: el Administrador puede ejecutar la acción sin PermisoOtorgado.
     [Fact]
     [Trait("Requerimiento", "RF-GP-05")]
     public async Task Puede_AsAdministratorWithoutGrant_ReturnsTrue()
@@ -28,6 +29,7 @@ public class AutorizacionPermisosServiceTests
         Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-05: quien recibió el permiso aprobado puede ejecutar la acción.
     [Fact]
     [Trait("Requerimiento", "RF-GP-05")]
     public async Task Puede_AsEstandarUserWithGrant_ReturnsTrue()
@@ -40,6 +42,7 @@ public class AutorizacionPermisosServiceTests
         Assert.True(puede);
     }
 
+    // RF-GP-05: sin permiso otorgado la acción sigue prohibida.
     [Fact]
     [Trait("Requerimiento", "RF-GP-05")]
     public async Task Puede_AsEstandarUserWithoutGrant_ReturnsFalse()
@@ -51,6 +54,7 @@ public class AutorizacionPermisosServiceTests
         Assert.False(puede);
     }
 
+    // RF-GP-05: el permiso otorgado no se hereda a otros usuarios.
     [Fact]
     [Trait("Requerimiento", "RF-GP-05")]
     public async Task Puede_WithGrantBelongingToAnotherUser_ReturnsFalse()

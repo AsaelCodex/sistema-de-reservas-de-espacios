@@ -16,6 +16,7 @@ public class ResolucionSolicitudServiceTests
         _servicio = new ResolucionSolicitudService(_solicitudes);
     }
 
+    // RF-GP-03: al aprobar queda registrado quién aprobó y cuándo.
     [Fact]
     [Trait("Requerimiento", "RF-GP-03")]
     public async Task Aprobar_FromPendingRequest_RecordsApproverAndDate()
@@ -46,6 +47,8 @@ public class ResolucionSolicitudServiceTests
         Assert.Equal(EstadoSolicitudPermiso.Aplicada, guardada.Estado);
     }
 
+    // RF-GP-06: aprobar dos veces se rechaza y conserva estado, primer
+    // aprobador, fecha y permisos otorgados.
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
     public async Task Aprobar_AppliedRequest_IsRejectedAndKeepsFirstApproval()
@@ -66,6 +69,32 @@ public class ResolucionSolicitudServiceTests
         Assert.Single(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-06: aprobar una solicitud detenida en Aprobada se rechaza y
+    // conserva el primer aprobador, la fecha de resolución y los permisos.
+    [Fact]
+    [Trait("Requerimiento", "RF-GP-06")]
+    [Trait("Requerimiento", "RF-GP-03")]
+    public async Task Aprobar_FromApprovedRequest_IsRejectedAndKeepsFirstApproval()
+    {
+        var solicitud = await CrearSolicitudAsync(EstadoSolicitudPermiso.Aprobada);
+        solicitud.AprobadorId = Guid.NewGuid();
+        solicitud.ResueltaEn = DateTime.UtcNow;
+        await _solicitudes.ActualizarAsync(solicitud);
+        var primerAprobador = solicitud.AprobadorId;
+        var resueltaEn = solicitud.ResueltaEn;
+
+        var resultado = await _servicio.AprobarAsync(solicitud.Id, Guid.NewGuid());
+
+        Assert.Equal(EstadoResolucionSolicitud.TransicionProhibida, resultado.Estado);
+        var guardada = (await _solicitudes.ObtenerPorIdAsync(solicitud.Id))!;
+        Assert.Equal(EstadoSolicitudPermiso.Aprobada, guardada.Estado);
+        Assert.Equal(primerAprobador, guardada.AprobadorId);
+        Assert.Equal(resueltaEn, guardada.ResueltaEn);
+        Assert.Empty(_permisosOtorgados.Permisos);
+    }
+
+    // RF-GP-06 / RF-GP-05: una solicitud Rechazada no vuelve a aprobarse ni
+    // crea permiso; el estado, el resolutor y la fecha quedan intactos.
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
     [Trait("Requerimiento", "RF-GP-05")]
@@ -94,6 +123,8 @@ public class ResolucionSolicitudServiceTests
         Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-04: sin motivo (ausente, vacío o solo espacios) el rechazo no se
+    // completa y la solicitud sigue Pendiente, sin resolver.
     [Theory]
     [Trait("Requerimiento", "RF-GP-04")]
     [Trait("Requerimiento", "RD-07")]
@@ -116,6 +147,8 @@ public class ResolucionSolicitudServiceTests
         Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-04: el motivo válido queda guardado (recortado) con el resolutor y
+    // la fecha de resolución, y el rechazo no crea permiso.
     [Fact]
     [Trait("Requerimiento", "RF-GP-04")]
     public async Task Rechazar_WithMotivo_PersistsRejectionAndReason()
@@ -138,6 +171,7 @@ public class ResolucionSolicitudServiceTests
         Assert.Empty(_permisosOtorgados.Permisos);
     }
 
+    // RF-GP-06: Aplicada → Rechazada no está permitida; nada cambia.
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
     public async Task Rechazar_AppliedRequest_IsRejectedAndKeepsState()
@@ -154,6 +188,8 @@ public class ResolucionSolicitudServiceTests
         Assert.Null(guardada.AprobadorId);
     }
 
+    // RF-GP-06: Rechazada → Rechazada no está permitida; se conserva el primer
+    // motivo y el primer resolutor.
     [Fact]
     [Trait("Requerimiento", "RF-GP-06")]
     public async Task Rechazar_Twice_KeepsFirstRejectionAndMotivo()
