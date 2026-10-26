@@ -30,8 +30,7 @@ public class ResolucionSolicitudService
 
         // RF-GP-06: la tabla centralizada decide antes de tocar el estado.
         // Una solicitud Rechazada no avanza y una Aplicada no se aprueba otra vez.
-        if (!TransicionesSolicitudPermiso.EsValida(
-                solicitud.Estado, EstadoSolicitudPermiso.Aprobada) ||
+        if (solicitud.Estado == EstadoSolicitudPermiso.Rechazada ||
             !TransicionesSolicitudPermiso.EsValida(
                 EstadoSolicitudPermiso.Aprobada, EstadoSolicitudPermiso.Aplicada))
         {
