@@ -36,10 +36,12 @@ módulo de reservas.
   RF-CA-22) y la máquina de estados del negocio (RF-NEG-03, RF-NEG-04,
   RF-NEG-05 y RF-NEG-09). El detalle y la evidencia están en
   `docs/matriz-requisitos.md`.
-- **Pruebas:** 303, todas en verde: 294 unitarias con fakes (no necesitan
-  base de datos) y 9 de persistencia sobre SQL Server LocalDB
-  (`SistemaDeReservas.Tests/Persistencia`), con una base propia por
-  prueba que se elimina al terminar.
+- **Pruebas:** 303 casos en verde (213 métodos de prueba, las teorías se
+  expanden): 294 casos sin LocalDB —negocio con fakes, seguridad, correo y
+  controladores invocados en memoria, sin servidor HTTP— y 9 casos de
+  persistencia sobre SQL Server LocalDB (`SistemaDeReservas.Tests/
+  Persistencia`), con una base propia por prueba que se elimina al
+  terminar.
 - **Endpoints:**
 
 | Método y ruta | Descripción | Rol |
@@ -168,48 +170,90 @@ Desde la raíz del repositorio, un único comando ejecuta toda la suite:
 dotnet test SistemaDeReservas/SistemaDeReservas.sln
 ```
 
-Resultado actual (ejecutado en esta rama): **303/303 en verde** —
-303 ejecutadas, **0 fallidas**, **0 omitidas**. Cada prueba declara el
-requisito que verifica con `[Trait("Requerimiento", "RF-CA-XX")]`,
+Cada prueba declara el requisito que verifica con
+`[Trait("Requerimiento", "RF-CA-XX")]`,
 `[Trait("Requerimiento", "RF-GP-XX")]`,
 `[Trait("Requerimiento", "RF-NOT-XX")]`,
 `[Trait("Requerimiento", "RF-NEG-XX")]` o
 `[Trait("Requerimiento", "RD-XX")]`.
 
-294 pruebas son unitarias: no necesitan base de datos ni servidor
-(usan fakes y un hasheador real de prueba). Las 9 de persistencia
-(`SistemaDeReservas.Tests/Persistencia`, RD-09) sí requieren SQL Server
-LocalDB:
+### Qué necesita cada grupo de pruebas
+
+- **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
+  **294 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  de correo y las pruebas de API, que invocan los controladores en memoria
+  (esta suite **no** usa `WebApplicationFactory` ni un servidor HTTP real,
+  por lo que no hay casos de integración HTTP). No necesitan base de datos
+  ni servidor.
+- **Entorno con persistencia**: los **9 casos de persistencia LocalDB**
+  (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
+  LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
+  crea su propia base `Reservas_Tests_*`, aplica las migraciones sobre una
+  base vacía y la elimina al terminar (también cuando la prueba falla);
+  tras la corrida no queda ninguna base temporal.
+
+Los 303 casos salen de **213 métodos de prueba**: 179 `[Fact]`, 25
+`[Theory]` y 9 `[LocalDbFact]`; las teorías se expanden en 115 casos con
+`[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
-# solo las 9 pruebas de persistencia
+# solo los 9 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo las 294 unitarias
+# solo los 294 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
-Cómo interpretar el resumen que imprime `dotnet test`:
+### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas**: total de pruebas descubiertas (303).
-- **Fallidas** (`Con error`): pruebas que no cumplieron su aserción; en
-  una suite sana deben ser 0.
-- **Omitidas**: pruebas que no corrieron. Aquí solo aparecen las 9 de
-  persistencia cuando LocalDB no está disponible; con LocalDB disponible
-  la ejecución es de 303 ejecutadas / 0 omitidas, y sin LocalDB queda en
-  294 ejecutadas / 9 omitidas / 0 fallidas.
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (303).
+- **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
+  aserción; en una suite sana deben ser 0.
+- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 9
+  de persistencia cuando LocalDB no está disponible.
 
-- Cada prueba de persistencia crea su propia base `Reservas_Tests_*` en
-  LocalDB, aplica las migraciones sobre una base vacía y la elimina al
-  terminar (también cuando la prueba falla); tras la corrida no queda
-  ninguna base temporal.
-- Sin LocalDB, esas 9 pruebas se **omiten** con el motivo. Para exigir
-  su ejecución (p. ej. en CI), definir `REQUIERE_PERSISTENCIA=1`: la
-  ausencia de LocalDB **falla** las pruebas con un mensaje claro en vez
-  de omitirlas.
-- `LOCALDB_PROBE_DATASOURCE` solo altera la sonda de disponibilidad
-  (sirve para verificar los dos comportamientos anteriores); la creación
-  de bases siempre usa `(localdb)\MSSQLLocalDB`.
+Con LocalDB disponible la corrida completa es **303 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **294
+ejecutadas / 0 fallidas / 9 omitidas**.
+
+### Modo estricto: `REQUIERE_PERSISTENCIA=1`
+
+Para exigir que las pruebas de persistencia se ejecuten (p. ej. en CI o
+antes de una entrega), definir la variable **antes** de lanzar el mismo
+comando:
+
+```powershell
+$env:REQUIERE_PERSISTENCIA = "1"
+dotnet test SistemaDeReservas/SistemaDeReservas.sln   # mismo comando único
+Remove-Item Env:REQUIERE_PERSISTENCIA                 # o cerrar la terminal
+```
+
+Comportamiento verificado de los tres escenarios:
+
+| Escenario | Resultado |
+|---|---|
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 303 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 294 ejecutadas, 0 fallidas, **9 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 303 ejecutadas, **9 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 294 correctas. |
+
+- **Un fallo por ausencia de LocalDB es un problema de infraestructura,
+  no es la detección de un defecto**: no prueba ningún comportamiento del
+  negocio, solo que la máquina de pruebas no tiene base de datos.
+- Del mismo modo, un **timeout puntual de SQL Server LocalDB** en una
+  prueba de persistencia (`SqlException: se agotó el tiempo de espera`)
+  es infraestructura: re-ejecutar la suite lo confirma y no cambia el
+  resultado de la suite.
+- `LOCALDB_PROBE_DATASOURCE` solo altera la **sonda** de disponibilidad
+  (sirve para reproducir los dos escenarios anteriores sin desinstalar
+  LocalDB); la creación de bases siempre usa `(localdb)\MSSQLLocalDB`.
+  La variable se define y se elimina dentro de la misma sesión de
+  PowerShell:
+
+```powershell
+$env:LOCALDB_PROBE_DATASOURCE = "servidor-inexistente"   # simula ausencia
+dotnet test SistemaDeReservas/SistemaDeReservas.sln
+Remove-Item Env:LOCALDB_PROBE_DATASOURCE
+```
 
 ## Defectos
 
@@ -225,13 +269,52 @@ correcto quedó restaurado y la suite volvió a 303/303. El detalle está en
 | A1 | `AprobarAsync` cambia la condición «el estado es Pendiente» por «el estado no es Rechazada» | `ResolucionSolicitudServiceTests.Aprobar_FromApprovedRequest_IsRejectedAndKeepsFirstApproval` (y 4 más, incluida `PutAprobar_AppliedRequest_ReturnsConflict`) | Aprobar desde `Aprobada` o `Aplicada` se rechaza (`TransicionProhibida`) conservando estado, primer aprobador, fecha y permisos; no nace un segundo permiso. |
 | A2 | Se agrega `Rechazada → Aplicada` a las transiciones permitidas | `TransicionesSolicitudPermisoTests.EsValida_WithCombinationOutsideTable_DeniesIt(Rechazada, Aplicada)` (junto con `Transicionar_WithCombinationOutsideTable…` y `ResolvedStates_HaveNoOutgoingTransitions`) | `Rechazada` es estado final: la combinación se rechaza y el estado no cambia. |
 | A3 | Se elimina la verificación que impide resolver la propia solicitud | `ResolucionPropiaTests.Aprobar_OwnRequest_IsRejectedWithoutChanges` y `…Rechazar_OwnRequest_IsRejectedWithoutChanges` (más las dos pruebas de API que esperan 403) | Un Administrador no puede aprobar ni rechazar su propia solicitud: `ResolucionPropia` / 403, sin estado, motivo, fecha ni permisos nuevos. |
-| A4 | En el listado propio se invierte «el solicitante es quien consulta» a «no es quien consulta» | `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests` | Con dos solicitantes, el listado propio devuelve las 3 solicitudes del usuario y excluye las 2 ajenas (filtro en el repositorio EF real). |
+| A4 | En el listado propio se invierte «el solicitante es quien consulta» a «no es quien consulta» | `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests` | Con dos solicitantes persistidos (3 propias y 2 ajenas), el listado propio tiene el tamaño exacto, todo lo devuelto pertenece al usuario, los identificadores coinciden exactamente con los de sus solicitudes (sin ajenas ni faltantes) y el listado del otro solicitante devuelve exactamente las suyas. |
 | A5 | Se agrega `Aprobada → Pendiente` a las transiciones permitidas | `TransicionesSolicitudPermisoTests.EsValida_WithCombinationOutsideTable_DeniesIt(Aprobada, Pendiente)` (junto con `Transicionar_WithCombinationOutsideTable…`) | `Aprobada → Pendiente` se rechaza y conserva el estado. |
 | A6 | Se elimina el guardado del motivo en la operación de rechazo | `ResolucionSolicitudServiceTests.Rechazar_WithMotivo_PersistsRejectionAndReason` (y 3 más, incluida la prueba de persistencia) | El rechazo válido guarda el motivo (recortado) junto al resolutor y la fecha; el inválido no resuelve la solicitud. |
 
-Nota sobre A4: su mutación vive en `SolicitudPermisoRepository`, que solo
-se ejercita con LocalDB; sin LocalDB esa prueba se omite y el defecto no
-se detectaría.
+Nota sobre A1: de sus 5 fallos, **1 es por aserción directa** y **4 por
+excepción** (3 `InvalidOperationException` del repositorio falso y 1
+`DbUpdateException`/`SqlException` del índice único en LocalDB). El
+desglose se confirmó reproduciendo A1 durante la revisión de esta
+documentación: 303 pruebas totales, 298 correctas, 5 incorrectas, 0
+omitidas.
+
+Nota sobre A4: su mutación vive en `SolicitudPermisoRepository.ObtenerPorSolicitanteAsync`
+y ninguna otra prueba ejercita ese método sobre EF Core real (las que no
+usan LocalDB pasan por `FakeSolicitudPermisoRepository`), por lo que
+**solo** la prueba de persistencia lo detecta. Esa prueba necesita LocalDB:
+
+- sin LocalDB y en modo normal se **omite**, y el defecto A4 quedaría sin
+  detectar (el resto de la suite seguiría en verde);
+- con `REQUIERE_PERSISTENCIA=1` y sin LocalDB la prueba **falla por
+  infraestructura**, lo que **no constituye la detección del defecto**: la
+  detección solo es válida cuando la prueba corre contra SQL Server y su
+  aserción de resultados falla (`Expected: 3 / Actual: 2` es el mensaje
+  observado con A4 introducido).
+
+Por eso la comprobación de A4 se hace con LocalDB disponible.
+
+### Verificación de la entrega (7 etiquetas, pendientes de crear)
+
+La entrega será `practica-2` (base correcta) más
+`practica-2-defecto-1` … `practica-2-defecto-6`. Para verificarlas:
+
+1. **SQL Server LocalDB disponible y `REQUIERE_PERSISTENCIA=1` en las 7
+   etiquetas**, para que ninguna prueba necesaria quede omitida (con
+   LocalDB presente el modo estricto no cambia la ejecución; solo evita
+   que la ausencia de la base se disimule como omisiones).
+2. **Base en verde:** una ejecución completa satisfactoria, 303
+   correctas / 0 incorrectas / 0 omitidas.
+3. **Cada mutante** debe fallar por su defecto, con 0 omitidas: los
+   fallos tienen que ser atribuibles al defecto introducido, no a
+   compilación ni a infraestructura.
+4. **Una corrida fallida se conserva como fallida.** La única corrida
+   fallida de esta revisión (timeout puntual de LocalDB en
+   `Esquema_CreaIndiceUnicoDeUsuarioYPermiso`) queda registrada como
+   infraestructura: no se elimina ni se reclasifica, y no justifica
+   modificar la implementación; se acepta porque las corridas
+   satisfactorias posteriores con el mismo código dieron 303/303.
 
 ## Documentación
 

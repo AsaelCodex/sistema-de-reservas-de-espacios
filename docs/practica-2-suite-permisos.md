@@ -17,6 +17,15 @@ existentes:
   **variante A**, introduciéndolos temporalmente uno por uno sobre la base
   correcta y restaurando el código antes del siguiente.
 
+**Revisión posterior (esta versión del documento):** se confirmó la
+dependencia de LocalDB de la detección de A4 y sus tres modos de
+ejecución, se reforzaron las aserciones de aislamiento de la prueba de A4
+(comparación exacta de identificadores), se confirmó el desglose de los
+5 fallos de A1 reproduciéndolo, y se corrigió la clasificación de los
+casos de prueba (métodos frente a casos) y el conteo de archivos
+afectados. Las ejecuciones de la validación inicial y las de esta
+revisión se listan por separado en la sección 4.
+
 No se refactorizó la arquitectura, no se cambiaron reglas de negocio y no
 se agregaron funcionalidades.
 
@@ -42,7 +51,7 @@ y el trait `[Trait("Requerimiento", "RF-GP-0X")]`.
 | `ListadoSolicitudesServiceTests.ListarPropias_NeverIncludesOtherUsersRequests` | Listado propio con **dos solicitantes**: contiene los propios y excluye los ajenos. |
 | `SolicitudesPermisosTests.GetPendientes_AsAdministrator_ReturnsOnlyPendingRequests` | API: el Administrador ve solo pendientes. |
 | `SolicitudesPermisosTests.GetMias_AsEstandarUser_ReturnsOnlyOwnRequests` | API: el Estándar no ve solicitudes de otros usuarios. |
-| `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests` | Repositorio EF real sobre LocalDB, dos solicitantes, tres propias y dos ajenas. |
+| `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests` | Repositorio EF real sobre LocalDB, **dos solicitantes** con filas persistidas (3 propias y 2 ajenas): tamaño exacto, todo lo devuelto pertenece al usuario, coincidencia exacta de identificadores con las propias (sin orden impuesto), ninguna fila ajena y listado del segundo solicitante exactamente el suyo. |
 
 ### RF-GP-03 — Al aprobar se registra quién y cuándo
 
@@ -110,24 +119,31 @@ y el trait `[Trait("Requerimiento", "RF-GP-0X")]`.
 
 Cada defecto se introdujo **uno por uno** sobre el código correcto, con la
 suite sin modificar, y se restauró con `git checkout -- <archivo>` antes
-del siguiente. En ningún caso hubo errores de compilación ni de
-infraestructura: todos los fallos fueron aserciones o excepciones de
-negocio.
+del siguiente. En ningún caso hubo errores de compilación: todos los
+fallos fueron aserciones o excepciones provocadas por el comportamiento
+defectuoso, nunca fallos de infraestructura de la máquina de pruebas.
 
 ### A1 — RF-GP-06: «el estado no es Rechazada» en `AprobarAsync`
 
 Archivo: `Business/GestionPermisos/ResolucionSolicitudService.cs`
 Cambio: `!EsValida(solicitud.Estado, Aprobada)` → `solicitud.Estado == Rechazada`.
 
-**5 pruebas fallaron:**
+**5 pruebas fallaron** (1 por aserción directa y 4 por excepción):
 
-| Prueba | Motivo del fallo |
-|---|---|
-| `ResolucionSolicitudServiceTests.Aprobar_FromApprovedRequest_IsRejectedAndKeepsFirstApproval` | `Assert.Equal`: esperado `TransicionProhibida`, obtenido `Aprobada`. |
-| `ResolucionSolicitudServiceTests.Aprobar_AppliedRequest_IsRejectedAndKeepsFirstApproval` | `InvalidOperationException`: «Ya existe un PermisoOtorgado para ese usuario y permiso». |
-| `AprobarAplicaPermisoTests.Aprobar_Twice_DoesNotCreateASecondGrant` | `InvalidOperationException`: duplicado en el repositorio falso (espejo del índice único). |
-| `SolicitudesPermisosTests.PutAprobar_AppliedRequest_ReturnsConflict` | Se esperaba 409; la aprobación repetida siguió adelante. |
-| `SolicitudResolucionPersistenciaTests.Aprobar_Twice_KeepsOneGrantAndFirstApprover` | `DbUpdateException` por el índice único `(UsuarioId, Permiso)` en SQL Server. |
+| Prueba | Tipo de fallo | Motivo observado |
+|---|---|---|
+| `ResolucionSolicitudServiceTests.Aprobar_FromApprovedRequest_IsRejectedAndKeepsFirstApproval` | **Aserción** | `Assert.Equal() Failure: Values differ` — `Expected: TransicionProhibida`, `Actual: Aprobada`. |
+| `ResolucionSolicitudServiceTests.Aprobar_AppliedRequest_IsRejectedAndKeepsFirstApproval` | Excepción | `System.InvalidOperationException : Ya existe un PermisoOtorgado para ese usuario y permiso.` (repositorio falso, espejo del índice único). |
+| `AprobarAplicaPermisoTests.Aprobar_Twice_DoesNotCreateASecondGrant` | Excepción | La misma `InvalidOperationException` del repositorio falso. |
+| `SolicitudesPermisosTests.PutAprobar_AppliedRequest_ReturnsConflict` | Excepción | La misma `InvalidOperationException` del repositorio falso (la aprobación repetida llegó a intentar crear el permiso duplicado en vez de devolver 409). |
+| `SolicitudResolucionPersistenciaTests.Aprobar_Twice_KeepsOneGrantAndFirstApprover` | Excepción | `Microsoft.EntityFrameworkCore.DbUpdateException` → `SqlException: Cannot insert duplicate key row … index 'IX_PermisosOtorgados_UsuarioId_Permiso'` en SQL Server. |
+
+Desglose confirmado: **1 fallo por aserción + 4 por excepción**
+(3 `InvalidOperationException` del repositorio falso y 1
+`DbUpdateException`/`SqlException` de LocalDB). Los cuatro por excepción
+siguen siendo detección: el comportamiento defectuoso hizo avanzar la
+aprobación hasta chocar con la restricción de integridad; en ningún caso
+fue un error de compilación.
 
 ### A2 — RF-GP-06: `Rechazada → Aplicada` permitida
 
@@ -165,11 +181,42 @@ Cambio: `Where(s => s.SolicitanteId == solicitanteId)` → `!=`.
 
 | Prueba | Motivo del fallo |
 |---|---|
-| `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests` | `Assert.Equal`: esperado 3 (las propias), obtenido 2 (las ajenas). |
+| `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests` | `Assert.Equal() Failure: Values differ` — `Expected: 3`, `Actual: 2` (primera aserción de resultados, el tamaño exacto). |
 
-El defecto vive en la consulta EF real, no en el servicio: las pruebas de
-unidad usan `FakeSolicitudPermisoRepository` y no lo alcanzaban. Por eso se
-añadió esta única prueba de persistencia (ver «Limitaciones»).
+El defecto vive en la consulta EF real, no en el servicio: las pruebas
+sin LocalDB usan `FakeSolicitudPermisoRepository` y no lo alcanzaban. Por
+eso se añadió esta única prueba de persistencia (ver «Limitaciones»).
+
+#### Aserciones concretas de aislamiento de la prueba
+
+La prueba crea **dos solicitantes** y persiste cinco filas con el
+repositorio EF real (tres del usuario que consulta y dos del otro), y
+después lista con un contexto nuevo e independiente del que escribió:
+
+1. `Assert.Equal(propias.Length, resultado.Count)` — tamaño exacto:
+   ni las ajenas amplían la lista ni faltan propias.
+2. `Assert.All(resultado, s => Assert.Equal(propio.Id, s.SolicitanteId))`
+   — todo lo devuelto pertenece a quien consulta.
+3. Comparación de conjuntos de identificadores **ordenados a ambos lados**
+   (`esperados.OrderBy(id => id)` vs `resultado.Select(s => s.Id).OrderBy(id => id)`):
+   coincidencia exacta, sin solicitudes ajenas ni elementos faltantes, sin
+   depender del orden del listado (el contrato `ObtenerPorSolicitanteAsync`
+   ordena por `CreadaEn` descendente, pero la prueba no lo exige).
+4. `Assert.DoesNotContain(resultado, s => s.SolicitanteId == ajeno.Id)`
+   — ninguna fila del otro solicitante aparece.
+5. El mismo listado consultado **del otro solicitante** devuelve
+   exactamente sus dos identificadores, con `Assert.All` sobre su
+   `SolicitanteId`: confirma que ambos solicitantes tienen filas
+   persistidas y que el filtro es simétrico.
+
+#### Evidencia de detección (revisado)
+
+- Con el código correcto: la prueba pasa (1/1 correcta).
+- Introducido **solo** el cambio A4 en el repositorio real y sin tocar las
+  pruebas: la misma prueba **falla por aserción de resultados**
+  (`Expected: 3 / Actual: 2`), no por compilación ni por infraestructura.
+- Restaurado exactamente ese cambio (`git checkout -- …/SolicitudPermisoRepository.cs`):
+  la prueba vuelve a pasar y `git diff` de producción queda vacío.
 
 ### A5 — RF-GP-06: `Aprobada → Pendiente` permitida
 
@@ -224,36 +271,144 @@ alcance de la ejecución.
 | 9 | Ejecución final, código correcto y árbol limpio | **303 correctas, 0 con error, 0 omitidas** |
 | 10 | Ejecución sin LocalDB (sonda apuntando a un servidor inexistente) | 294 correctas, 0 fallidas, **9 omitidas**, total 303 |
 
+Las filas 1 a 10 corresponden a la **validación inicial** de los defectos
+(registros en `%TEMP%\practica2\A1.log` … `A6.log`).
+
+### Ejecuciones de esta revisión (posteriores a la validación inicial)
+
+| # | Ejecución | Resultado observado | Tipo |
+|---|---|---|---|
+| 11 | Prueba A4 con el código correcto (tras reforzar sus aserciones) | 1 correcta de 1 | Comportamiento |
+| 12 | Prueba A4 con **solo** A4 introducido | **Fallida por aserción**: `Expected: 3 / Actual: 2` | Comportamiento |
+| 13 | Prueba A4 tras restaurar A4 | 1 correcta de 1 | Comportamiento |
+| 14 | Suite completa con **solo** A1 introducido (A4 reforzada ya incluida) | 303 totales: **298 correctas, 5 incorrectas**, 0 omitidas — desglose de A1 confirmado | Comportamiento |
+| 15 | Suite sin LocalDB, modo normal (sonda `LOCALDB_PROBE_DATASOURCE=servidor-inexistente`) | 303 totales: **294 correctas, 0 incorrectas, 9 omitidas** | Omisión |
+| 16 | Suite sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 303 totales: **294 correctas, 9 incorrectas** — `InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` (LocalDB no disponible) | **Infraestructura** |
+| 17 | Suite completa con LocalDB y `REQUIERE_PERSISTENCIA=1`, código correcto | **303 correctas, 0 incorrectas, 0 omitidas** | Comportamiento |
+| 18 | Repetición de la corrida estricta (tras editar solo comentarios del código de prueba) | 302 correctas / **1 incorrecta**: `PermisoOtorgadoPersistenciaTests.Esquema_CreaIndiceUnicoDeUsuarioYPermiso` con `DbUpdateException` → `SqlException` de **tiempo de espera agotado** (55 s) | **Infraestructura** (transitorio) |
+| 19 | Re-ejecución inmediata de la corrida estricta | **303 correctas, 0 incorrectas, 0 omitidas** | Comportamiento |
+| 20 | Verificación final, corrida 1 (LocalDB + `REQUIERE_PERSISTENCIA=1`) | **303 correctas, 0 incorrectas, 0 omitidas** | Comportamiento |
+| 21 | Verificación final, corrida 2 (LocalDB + `REQUIERE_PERSISTENCIA=1`) | **303 correctas, 0 incorrectas, 0 omitidas** | Comportamiento |
+| 22 | Cierre, corrida de base con LocalDB + `REQUIERE_PERSISTENCIA=1` (`cierre-base-1.log`) | **303 correctas, 0 incorrectas, 0 omitidas** | Comportamiento |
+| 23 | Cierre, mutante **A4** con LocalDB + `REQUIERE_PERSISTENCIA=1` (`cierre-A4.log`) | 303 totales: 302 correctas / **1 incorrecta** — `ListadoSolicitudesPersistenciaTests.ListarPropias_WithTwoApplicants_ReturnsOnlyOwnRequests`, `Assert.Equal(): Expected: 3, Actual: 2`, **0 omitidas** | Comportamiento (atribuible a A4) |
+| 24 | Cierre, corrida de base tras restaurar A4 (`cierre-base-2.log`) | **303 correctas, 0 incorrectas, 0 omitidas** | Comportamiento |
+
+Registros de esta revisión: `%TEMP%\practica2\A1-revision.log`,
+`estricto-sin-localdb.log`, `final-estricto.log`, `final-2.log`,
+`final-3.log`, `verificacion-final-1.log`, `verificacion-final-2.log`,
+`cierre-base-1.log`, `cierre-A4.log` y `cierre-base-2.log`. Las variables
+`LOCALDB_PROBE_DATASOURCE` y `REQUIERE_PERSISTENCIA` se definieron y se
+eliminaron dentro de la misma sesión de PowerShell; el entorno quedó con
+ambas sin definir.
+
+La fila 18 es un **fallo de infraestructura** (timeout de SQL Server
+LocalDB, sin relación con el código de negocio ni con esta revisión): las
+corridas siguientes con el mismo código (19, 20, 21 y 22) volvieron a 303/303.
+**Se conserva como corrida fallida**: no se elimina, no se repite para
+reemplazarla ni se reclasifica como correcta; el timeout aislado no
+justifica modificar la implementación. No cuenta como detección de
+ningún defecto ni invalida las demás filas.
+
+### Condiciones de verificación de las 7 etiquetas (pendientes de crear)
+
+La entrega se materializará con **7 etiquetas**: `practica-2` (base
+correcta) y `practica-2-defecto-1` … `practica-2-defecto-6` (un mutante
+cada una). Aún no están creadas ni los commits asociados.
+
+Condiciones acordadas para verificarlas:
+
+1. **SQL Server LocalDB debe estar disponible y la verificación se hace
+   con `REQUIERE_PERSISTENCIA=1`** en las 7 etiquetas, de modo que ninguna
+   prueba necesaria para A4 (la de persistencia) quede omitida. Con
+   LocalDB presente el modo estricto no altera la ejecución —solo cambia
+   el comportamiento cuando falta la base (omisión → fallo de
+   infraestructura)—, por lo que las corridas de la validación inicial,
+   hechas con LocalDB disponible, siguen siendo válidas.
+2. **Criterio de aceptación:** una ejecución completa **satisfactoria
+   sobre la base** (303 correctas, 0 incorrectas, 0 omitidas; corridas 22
+   y 24 ya lo cumplen) y, en cada mutante, **fallos atribuibles a ese
+   defecto** con 0 omitidas (corrida 23 lo cumple para A4 con la
+   configuración exigida; A1…A6 cumplieron en su validación inicial,
+   filas 3 a 8, con LocalDB disponible).
+3. **Toda corrida fallida se conserva como fallida** en el registro, con
+   su causa (comportamiento o infraestructura).
+
+### Entorno y modos de ejecución con LocalDB
+
+- **Entorno mínimo** (294 casos sin LocalDB): .NET SDK 10; pruebas de
+  negocio con fakes, de seguridad, de correo y de API. Esta suite no usa
+  `WebApplicationFactory` ni un servidor HTTP: las pruebas de API invocan
+  los controladores en memoria.
+- **Entorno con persistencia** (9 casos `[LocalDbFact]`): SQL Server
+  LocalDB accesible en `(localdb)\MSSQLLocalDB`; cada prueba crea y borra
+  su propia base `Reservas_Tests_*`.
+- **Comando único en ambos casos**:
+  `dotnet test SistemaDeReservas/SistemaDeReservas.sln`.
+- **Modo estricto** (PowerShell, antes del mismo comando):
+  `$env:REQUIERE_PERSISTENCIA = "1"`.
+- Sin LocalDB y sin modo estricto las 9 pruebas se **omiten** y A4 queda
+  sin detectar; con el modo estricto **fallan por infraestructura**, y un
+  fallo por ausencia de LocalDB **no constituye la detección de un
+  defecto** (solo indica que la máquina de pruebas no tiene base de datos).
+
+### Conteos: métodos frente a casos
+
+- **213 métodos de prueba**: 179 `[Fact]`, 25 `[Theory]` y 9 `[LocalDbFact]`.
+- **303 casos**: las teorías se expanden en 115 casos con `[InlineData]`
+  (179 + 115 + 9 = 303).
+- **294 casos sin LocalDB** (179 `[Fact]` + 115 casos de teoría) y
+  **9 casos de persistencia LocalDB**. «Unitarias» no es una clasificación
+  exacta aquí: hay casos que ejercitan controladores API en memoria, que
+  también corren sin base de datos.
+
 Detalle:
 
-- Las 303 pruebas se componen de **294 unitarias** (servicios, controladores
-  y fakes, sin infraestructura externa) y **9 de persistencia**
-  (`[LocalDbFact]`) que requieren SQL Server LocalDB.
-- Sin LocalDB, esas 9 se **omiten** con un mensaje claro; ninguna falla.
-  Las 294 restantes siguen ejecutándose.
-- Los fallos de A1…A6 se registraron en
+- Sin LocalDB, los 9 casos de persistencia se **omiten** con un mensaje
+  claro; ninguno falla. Los 294 restantes siguen ejecutándose.
+- Los fallos de A1…A6 de la validación inicial se registraron en
   `%TEMP%\practica2\A1.log` … `A6.log`.
-- Tras cada mutación el archivo se restauró y se comprobó
-  `git status --porcelain` limpio antes de pasar al siguiente.
+- Tras cada mutación el archivo se restauró y se comprobó que `git diff`
+  de los proyectos de producción quedara vacío antes de pasar al
+  siguiente.
 
 ## 5. Limitaciones y verificaciones pendientes
 
 1. **A4 depende de LocalDB.** El filtro «solo mis solicitudes» vive en
-   `SolicitudPermisoRepository`, y solo una prueba de persistencia lo
-   ejercita contra EF real. En un entorno sin LocalDB esa prueba se omite y
-   el defecto A4 **no se detectaría** (294 pruebas restantes permanecerían
-   verdes). Ejecutar con `REQUIERE_PERSISTENCIA=1` para convertir las
-   omisiones en fallos cuando la persistencia sea obligatoria.
-2. **Tres de los cinco fallos de A1 se manifiestan por excepción**
-   (`InvalidOperationException` / `DbUpdateException` del índice único)
-   y no por una aserción de estado. Detectan el defecto igualmente, porque
-   la aprobación repetida avanza hasta intentar crear un permiso duplicado,
+   `SolicitudPermisoRepository.ObtenerPorSolicitanteAsync`, y solo una
+   prueba de persistencia lo ejercita contra EF Core real (verificado por
+   búsqueda: el resto de pruebas pasan por `FakeSolicitudPermisoRepository`
+   o por `ListadoSolicitudesService` con el falso). En un entorno sin
+   LocalDB y en modo normal esa prueba se **omite** y el defecto A4 **no se
+   detectaría** (los 294 casos restantes permanecerían verdes); con
+   `REQUIERE_PERSISTENCIA=1` la prueba **falla por infraestructura**, lo
+   que tampoco es una detección. A4 solo se detecta con LocalDB
+   disponible, cuando su aserción de resultados falla. **No se añadieron
+   proveedores de BD ni se refactorizó la persistencia** para eliminar esa
+   dependencia.
+2. **Cuatro de los cinco fallos de A1 se manifiestan por excepción**
+   (3 `InvalidOperationException` del repositorio falso y 1
+   `DbUpdateException`/`SqlException` del índice único en LocalDB) y no
+   por una aserción de estado. Detectan el defecto igualmente, porque la
+   aprobación repetida avanza hasta intentar crear un permiso duplicado,
    pero el mensaje de fallo es el de la restricción de integridad.
-3. **A1 también se detecta por aserción** en
+3. **El quinto fallo de A1 se detecta por aserción** en
    `Aprobar_FromApprovedRequest_IsRejectedAndKeepsFirstApproval`
    (`TransicionProhibida` vs `Aprobada`), que es la señal más directa.
+   El desglose fue confirmado reproducindo A1 durante la revisión
+   (ejecución 14): 298 correctas / 5 incorrectas / 0 omitidas.
 4. No se añadieron pruebas de BD por requisito: solo se creó
    `ListadoSolicitudesPersistenciaTests` porque es la única evidencia
    posible para A4.
-5. No se crearon tags `practica-2` ni `practica-2-defecto-N`, no se hizo
-   `push` y no quedó ningún defecto temporal en el código.
+5. **No se crearon tags `practica-2` ni `practica-2-defecto-N`, no se
+   hizo `push` y no quedó ningún defecto temporal en el código.** La
+   entrega en Git (1 commit base + 6 commits/etiquetas de defecto) sigue
+   pendiente; las condiciones de verificación quedaron descritas en la
+   sección 4 («Condiciones de verificación de las 7 etiquetas»):
+   LocalDB disponible y `REQUIERE_PERSISTENCIA=1` en las 7, ejecución
+   satisfactoria de 303/303/0 omitidas sobre la base y fallos atribuibles
+   al defecto en cada mutante.
+6. **Timeout aislado de LocalDB.** La fila 18 (`Esquema_CreaIndiceUnicoDeUsuarioYPermiso`,
+   `SqlException` de tiempo de espera tras 55 s) se conserva como corrida
+   fallida. Es infraestructura y no justifica modificar la implementación
+   ni el esquema de la prueba; se acepta solo sobre la base de contar con
+   corridas satisfactorias posteriores con el mismo código (19-22 y 24).
