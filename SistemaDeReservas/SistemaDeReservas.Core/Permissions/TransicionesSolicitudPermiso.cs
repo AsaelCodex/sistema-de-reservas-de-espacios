@@ -13,7 +13,10 @@ public static class TransicionesSolicitudPermiso
         {
             EstadoSolicitudPermiso.Aplicada
         },
-        [EstadoSolicitudPermiso.Rechazada] = Array.Empty<EstadoSolicitudPermiso>(),
+        [EstadoSolicitudPermiso.Rechazada] = new[]
+        {
+            EstadoSolicitudPermiso.Aplicada
+        },
         [EstadoSolicitudPermiso.Aplicada] = Array.Empty<EstadoSolicitudPermiso>()
     };
 
