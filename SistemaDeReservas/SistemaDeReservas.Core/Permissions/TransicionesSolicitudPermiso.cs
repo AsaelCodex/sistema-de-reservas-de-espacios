@@ -11,6 +11,7 @@ public static class TransicionesSolicitudPermiso
         },
         [EstadoSolicitudPermiso.Aprobada] = new[]
         {
+            EstadoSolicitudPermiso.Pendiente,
             EstadoSolicitudPermiso.Aplicada
         },
         [EstadoSolicitudPermiso.Rechazada] = Array.Empty<EstadoSolicitudPermiso>(),
