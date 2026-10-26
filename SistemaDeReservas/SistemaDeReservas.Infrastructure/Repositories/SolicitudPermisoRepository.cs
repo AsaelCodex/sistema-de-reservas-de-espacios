@@ -47,7 +47,7 @@ public class SolicitudPermisoRepository : ISolicitudPermisoRepository
         CancellationToken cancellationToken = default)
     {
         return await _context.SolicitudesPermiso
-            .Where(s => s.SolicitanteId == solicitanteId)
+            .Where(s => s.SolicitanteId != solicitanteId)
             .OrderByDescending(s => s.CreadaEn)
             .ToListAsync(cancellationToken);
     }
