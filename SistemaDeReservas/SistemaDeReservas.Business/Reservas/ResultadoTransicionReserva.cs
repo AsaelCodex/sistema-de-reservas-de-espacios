@@ -6,6 +6,7 @@ public enum EstadoTransicion
 {
     Transicionada,
     TransicionProhibida,
+    CondicionIncumplida,
     ReservaNoEncontrada
 }
 
@@ -23,6 +24,14 @@ public sealed record ResultadoTransicionReserva(
         new(
             EstadoTransicion.TransicionProhibida,
             $"La transición de {origen} a {destino} no está permitida.",
+            null);
+
+    public static ResultadoTransicionReserva CondicionIncumplida(
+        EstadoReserva origen,
+        EstadoReserva destino) =>
+        new(
+            EstadoTransicion.CondicionIncumplida,
+            $"El actor no cumple la condición requerida para la transición de {origen} a {destino}.",
             null);
 
     public static ResultadoTransicionReserva ReservaNoEncontrada() =>
