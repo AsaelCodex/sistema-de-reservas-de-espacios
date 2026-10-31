@@ -19,7 +19,7 @@ public class TransicionReservaService
     public async Task<ResultadoTransicionReserva> TransicionarAsync(
         Guid reservaId,
         EstadoReserva destino,
-        ActorReserva actor,
+        ActorReserva? actor,
         CancellationToken cancellationToken = default)
     {
         var reserva = await _reservas.ObtenerPorIdAsync(reservaId, cancellationToken);
@@ -30,6 +30,11 @@ public class TransicionReservaService
 
         var decision = TransicionesReserva.Evaluar(
             reserva.Estado, destino, actor, reserva.UsuarioId);
+
+        if (decision == DecisionTransicionReserva.ActorInvalido)
+        {
+            return ResultadoTransicionReserva.ActorInvalido();
+        }
 
         if (decision == DecisionTransicionReserva.Prohibida)
         {

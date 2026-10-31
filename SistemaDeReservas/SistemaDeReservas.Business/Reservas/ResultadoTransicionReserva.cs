@@ -7,6 +7,7 @@ public enum EstadoTransicion
     Transicionada,
     TransicionProhibida,
     CondicionIncumplida,
+    ActorInvalido,
     ReservaNoEncontrada
 }
 
@@ -32,6 +33,12 @@ public sealed record ResultadoTransicionReserva(
         new(
             EstadoTransicion.CondicionIncumplida,
             $"El actor no cumple la condición requerida para la transición de {origen} a {destino}.",
+            null);
+
+    public static ResultadoTransicionReserva ActorInvalido() =>
+        new(
+            EstadoTransicion.ActorInvalido,
+            "El actor no es válido para ejecutar la operación.",
             null);
 
     public static ResultadoTransicionReserva ReservaNoEncontrada() =>

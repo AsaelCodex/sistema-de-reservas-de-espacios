@@ -18,7 +18,8 @@ public enum DecisionTransicionReserva
 {
     Permitida,
     Prohibida,
-    CondicionIncumplida
+    CondicionIncumplida,
+    ActorInvalido
 }
 
 /// <summary>
@@ -65,15 +66,23 @@ public static class TransicionesReserva
     }
 
     /// <summary>
-    /// Decide una transición completa: primero la tabla estructural y luego la
-    /// condición del actor. No modifica el estado.
+    /// Decide una transición completa: primero la validez del actor, luego la
+    /// tabla estructural y por último la condición del actor. No modifica el
+    /// estado.
     /// </summary>
     public static DecisionTransicionReserva Evaluar(
         EstadoReserva origen,
         EstadoReserva destino,
-        ActorReserva actor,
+        ActorReserva? actor,
         Guid propietarioId)
     {
+        // RD-07: un actor ausente o mal formado se rechaza antes de consultar
+        // la tabla, para que no pueda aprovechar una coincidencia de propietario.
+        if (actor is null || !actor.EsValido)
+        {
+            return DecisionTransicionReserva.ActorInvalido;
+        }
+
         var condicion = Condicion(origen, destino);
         if (condicion is null)
         {

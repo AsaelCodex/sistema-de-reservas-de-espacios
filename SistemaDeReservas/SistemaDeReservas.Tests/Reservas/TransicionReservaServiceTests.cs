@@ -232,6 +232,86 @@ public class TransicionReservaServiceTests
 
     [Fact]
     [Trait("Requerimiento", "RD-07")]
+    public async Task Transicionar_WithEmptyActorId_IsRejectedAndKeepsState()
+    {
+        // Preparar: identificador vacío, incluso con rol Administrador.
+        var reserva = await CrearReservaAsync(EstadoReserva.Solicitada);
+        var actor = new ActorReserva(Guid.Empty, Rol.Administrador);
+
+        // Actuar
+        var resultado = await _servicio.TransicionarAsync(
+            reserva.Id, EstadoReserva.Confirmada, actor);
+
+        // Verificar
+        Assert.Equal(EstadoTransicion.ActorInvalido, resultado.Estado);
+        Assert.Contains("no es válido", resultado.Mensaje);
+        Assert.Equal(EstadoReserva.Solicitada, reserva.Estado);
+        Assert.Equal(EstadoReserva.Solicitada, (await _reservas.ObtenerPorIdAsync(reserva.Id))!.Estado);
+        Assert.Equal(0, _reservas.Actualizaciones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Transicionar_WithEmptyActorIdAsOwner_IsRejectedAndKeepsState()
+    {
+        // Preparar: el identificador vacío coincide con el propietario, pero
+        // no es un actor utilizable.
+        var reserva = await CrearReservaAsync(
+            EstadoReserva.Solicitada, propietarioId: Guid.Empty);
+        var actor = new ActorReserva(Guid.Empty, Rol.Estandar);
+
+        // Actuar
+        var resultado = await _servicio.TransicionarAsync(
+            reserva.Id, EstadoReserva.Cancelada, actor);
+
+        // Verificar
+        Assert.Equal(EstadoTransicion.ActorInvalido, resultado.Estado);
+        Assert.Equal(EstadoReserva.Solicitada, reserva.Estado);
+        Assert.Equal(EstadoReserva.Solicitada, (await _reservas.ObtenerPorIdAsync(reserva.Id))!.Estado);
+        Assert.Equal(0, _reservas.Actualizaciones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Transicionar_WithUndefinedActorRole_IsRejectedAndKeepsState()
+    {
+        // Preparar: rol fuera del enum y mismo identificador del propietario.
+        var reserva = await CrearReservaAsync(EstadoReserva.Solicitada);
+        var actor = new ActorReserva(reserva.UsuarioId, (Rol)99);
+
+        // Actuar
+        var resultado = await _servicio.TransicionarAsync(
+            reserva.Id, EstadoReserva.Cancelada, actor);
+
+        // Verificar
+        Assert.Equal(EstadoTransicion.ActorInvalido, resultado.Estado);
+        Assert.Contains("no es válido", resultado.Mensaje);
+        Assert.Equal(EstadoReserva.Solicitada, reserva.Estado);
+        Assert.Equal(EstadoReserva.Solicitada, (await _reservas.ObtenerPorIdAsync(reserva.Id))!.Estado);
+        Assert.Equal(0, _reservas.Actualizaciones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Transicionar_WithNullActor_IsRejectedAndKeepsState()
+    {
+        // Preparar
+        var reserva = await CrearReservaAsync(EstadoReserva.Solicitada);
+
+        // Actuar
+        var resultado = await _servicio.TransicionarAsync(
+            reserva.Id, EstadoReserva.Confirmada, actor: null);
+
+        // Verificar
+        Assert.Equal(EstadoTransicion.ActorInvalido, resultado.Estado);
+        Assert.Contains("no es válido", resultado.Mensaje);
+        Assert.Equal(EstadoReserva.Solicitada, reserva.Estado);
+        Assert.Equal(EstadoReserva.Solicitada, (await _reservas.ObtenerPorIdAsync(reserva.Id))!.Estado);
+        Assert.Equal(0, _reservas.Actualizaciones);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RD-07")]
     public async Task Transicionar_WithUnknownReserva_ReturnsControlledRejection()
     {
         // Preparar
@@ -272,12 +352,14 @@ public class TransicionReservaServiceTests
         return new ActorReserva(Guid.NewGuid(), Rol.Administrador);
     }
 
-    private async Task<Reserva> CrearReservaAsync(EstadoReserva estado)
+    private async Task<Reserva> CrearReservaAsync(
+        EstadoReserva estado,
+        Guid? propietarioId = null)
     {
         var reserva = new Reserva
         {
             Id = Guid.NewGuid(),
-            UsuarioId = Guid.NewGuid(),
+            UsuarioId = propietarioId ?? Guid.NewGuid(),
             Espacio = "Salón 101",
             Fecha = DateTime.UtcNow.Date.AddDays(1),
             HoraInicio = new TimeSpan(8, 0, 0),
