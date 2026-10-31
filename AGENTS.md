@@ -50,46 +50,38 @@ oficiales.
 
 ## 4. Etapa actual del proyecto
 
-Actualmente el proyecto se encuentra en las semanas 2 a 4.
+Actualmente el proyecto se encuentra en la práctica 3 (semanas 4 y 8).
 
-La pieza que se implementará durante esta etapa es:
+La pieza que se trabaja durante esta etapa es el contrato del módulo
+de negocio y sus reglas de transición:
 
-Pieza 1 - Control de Acceso.
+- Pieza 1 - Control de Acceso: implementada y verificada.
+- Pieza 2 - Gestión de Permisos: implementada y verificada.
+- Módulo de negocio: contrato y reglas de transición en curso.
 
-El Control de Acceso es la base de las demás funcionalidades del
-Core y las operaciones del sistema deberán quedar protegidas por
+El Control de Acceso sigue siendo la base de las demás funcionalidades
+del Core y las operaciones del sistema deberán quedar protegidas por
 él.
 
 ## 5. Alcance actual
 
-Durante las semanas 2 a 4 se trabajará principalmente con:
+Durante la práctica 3 se trabajará principalmente con:
 
-- RD-01
-- RD-02
-- RD-05
-- RD-06
+- RD-04
 - RD-07
-- RD-08
-- RD-09
-- RD-10
-- RD-11
 - RD-12
 
 Y con:
 
-- RF-CA-01
-- RF-CA-02
-- RF-CA-03
-- RF-CA-04
-- RF-CA-05
-- RF-CA-06
-- RF-CA-07
-- RF-CA-08
-- RF-CA-09
-- RF-CA-10
-- RF-CA-11
-- RF-CA-12
-- RF-CA-13
+- RF-NEG-02
+- RF-NEG-03
+- RF-NEG-04
+- RF-NEG-05
+- RF-NEG-06
+- RF-NEG-09
+
+RF-NEG-02 y RF-NEG-06 no se consideran terminados mientras falten
+operaciones del negocio y su exposición protegida.
 
 No implementar funcionalidades fuera del alcance solicitado.
 

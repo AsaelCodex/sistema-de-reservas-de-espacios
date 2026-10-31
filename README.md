@@ -321,8 +321,10 @@ La entrega será `practica-2` (base correcta) más
 - `docs/requerimientos-core.md`: requisitos oficiales del Core con sus
   identificadores (RD-XX, RF-CA-XX, RF-NOT-XX, etc.).
 - `docs/matriz-requisitos.md`: estado de cada requisito y su evidencia.
-- `docs/maquina-estados-negocio.md`: estados y transiciones de la
+- `docs/maquina-de-estados.md`: estados, transiciones y condiciones de la
   reserva (RF-NEG-03 a RF-NEG-05).
+- `docs/contrato-negocio.md`: operaciones previstas del módulo de reservas y su
+  autorización.
 - `docs/bitacora-asignación-1.md`: bitácora del proyecto.
 - `docs/practica-2-suite-permisos.md`: Práctica 2 — suite de Gestión de
   permisos: relación RF-GP ↔ pruebas, defectos detectados y resultados.

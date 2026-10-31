@@ -8,6 +8,8 @@ public sealed class FakeReservaRepository : IReservaRepository
 
     public IReadOnlyList<Reserva> Reservas => _reservas;
 
+    public int Actualizaciones { get; private set; }
+
     public Task GuardarAsync(Reserva reserva, CancellationToken cancellationToken = default)
     {
         _reservas.Add(reserva);
@@ -29,6 +31,7 @@ public sealed class FakeReservaRepository : IReservaRepository
         }
 
         _reservas[indice] = reserva;
+        Actualizaciones++;
         return Task.CompletedTask;
     }
 }
