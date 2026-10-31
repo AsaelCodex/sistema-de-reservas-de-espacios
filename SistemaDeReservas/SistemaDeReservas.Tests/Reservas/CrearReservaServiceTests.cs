@@ -102,6 +102,32 @@ public class CrearReservaServiceTests
         Assert.Empty(_reservas.Reservas);
     }
 
+    // RF-NEG-02: un fallo al adquirir el bloqueo de aplicación es una causa
+    // distinta de un conflicto de horario y no debe escribir nada.
+    [Fact]
+    [Trait("Requerimiento", "RF-NEG-02")]
+    public async Task Crear_WhenLockIsNotAcquired_ReturnsControlledErrorWithoutWrite()
+    {
+        // Preparar
+        var usuario = await CrearUsuarioAutorizadoAsync();
+        _reservas.SimularBloqueoNoAdquirido = true;
+
+        // Actuar
+        var resultado = await _servicio.CrearAsync(
+            Actor(usuario),
+            "SALON A",
+            Fecha,
+            new TimeSpan(10, 0, 0),
+            new TimeSpan(12, 0, 0));
+
+        // Verificar
+        Assert.Equal(EstadoCreacionReserva.BloqueoNoAdquirido, resultado.Estado);
+        Assert.DoesNotContain("horario", resultado.Mensaje);
+        Assert.Contains("Intente de nuevo", resultado.Mensaje);
+        Assert.Null(resultado.Reserva);
+        Assert.Empty(_reservas.Reservas);
+    }
+
     // RD-07: un actor ausente, vacío o con rol fuera del enum se rechaza sin
     // consultar disponibilidad ni escribir.
     [Theory]

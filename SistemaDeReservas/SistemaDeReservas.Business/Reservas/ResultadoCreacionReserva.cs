@@ -8,7 +8,8 @@ public enum EstadoCreacionReserva
     DatosInvalidos,
     PermisoDenegado,
     ActorInvalido,
-    ConflictoHorario
+    ConflictoHorario,
+    BloqueoNoAdquirido
 }
 
 public sealed record ResultadoCreacionReserva(
@@ -38,5 +39,11 @@ public sealed record ResultadoCreacionReserva(
         new(
             EstadoCreacionReserva.ConflictoHorario,
             "El espacio ya está reservado en ese horario.",
+            null);
+
+    public static ResultadoCreacionReserva BloqueoNoAdquirido() =>
+        new(
+            EstadoCreacionReserva.BloqueoNoAdquirido,
+            "No fue posible asegurar la disponibilidad en este momento. Intente de nuevo.",
             null);
 }

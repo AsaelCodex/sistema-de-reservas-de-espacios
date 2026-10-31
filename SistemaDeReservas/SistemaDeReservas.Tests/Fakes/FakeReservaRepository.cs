@@ -10,25 +10,35 @@ public sealed class FakeReservaRepository : IReservaRepository
 
     public int Actualizaciones { get; private set; }
 
+    /// <summary>
+    /// Simula que el bloqueo de aplicación no pudo adquirirse.
+    /// </summary>
+    public bool SimularBloqueoNoAdquirido { get; set; }
+
     public Task GuardarAsync(Reserva reserva, CancellationToken cancellationToken = default)
     {
         _reservas.Add(reserva);
         return Task.CompletedTask;
     }
 
-    public Task<bool> AgregarSiDisponibleAsync(
+    public Task<ResultadoAgregarReserva> AgregarSiDisponibleAsync(
         Reserva reserva,
         CancellationToken cancellationToken = default)
     {
+        if (SimularBloqueoNoAdquirido)
+        {
+            return Task.FromResult(ResultadoAgregarReserva.BloqueoNoAdquirido);
+        }
+
         // Espejo de la regla central: si alguna reserva bloqueante se solapa,
         // no se agrega nada.
         if (_reservas.Any(existente => DisponibilidadReserva.EntraEnConflicto(reserva, existente)))
         {
-            return Task.FromResult(false);
+            return Task.FromResult(ResultadoAgregarReserva.Conflicto);
         }
 
         _reservas.Add(reserva);
-        return Task.FromResult(true);
+        return Task.FromResult(ResultadoAgregarReserva.Insertada);
     }
 
     public Task<Reserva?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default)

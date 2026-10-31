@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
@@ -138,6 +139,59 @@ public class ReservaPersistenciaTests : BasePruebaPersistencia
 
         await using var contextoVerificacion = NuevoContexto();
         Assert.Single(await contextoVerificacion.Reservas.AsNoTracking().ToListAsync());
+    }
+
+    // RF-NEG-02: si otra transacción retiene el bloqueo de la fecha, el
+    // repositorio informa BloqueoNoAdquirido, revierte y no inserta. Este
+    // resultado no debe confundirse con un conflicto de horario.
+    [LocalDbFact]
+    [Trait("Categoria", "Persistencia")]
+    [Trait("Requerimiento", "RF-NEG-02")]
+    public async Task Crear_WhenDateLockIsHeld_ReturnsLockNotAcquiredWithoutInsert()
+    {
+        var usuario = await CrearUsuarioAsync();
+        await OtorgarCrearReservaAsync(usuario.Id);
+
+        await using var contextoBloqueo = NuevoContexto();
+        await contextoBloqueo.Database.OpenConnectionAsync();
+        await using var transaccion = await contextoBloqueo.Database.BeginTransactionAsync();
+
+        await using (var comando = contextoBloqueo.Database.GetDbConnection().CreateCommand())
+        {
+            comando.Transaction = transaccion.GetDbTransaction();
+            comando.CommandText =
+                "DECLARE @resultado int; " +
+                "EXEC @resultado = sp_getapplock " +
+                "@Resource = @recurso, @LockMode = 'Exclusive', " +
+                "@LockOwner = 'Transaction', @LockTimeout = 0; " +
+                "SELECT @resultado;";
+            var parametro = comando.CreateParameter();
+            parametro.ParameterName = "@recurso";
+            parametro.Value = DisponibilidadReserva.RecursoBloqueo(Fecha);
+            comando.Parameters.Add(parametro);
+
+            var codigo = Convert.ToInt32(await comando.ExecuteScalarAsync());
+            Assert.True(codigo >= 0, $"No se pudo retener el bloqueo de prueba: {codigo}.");
+        }
+
+        await using var contexto = NuevoContexto();
+        var repositorio = new ReservaRepository(contexto, tiempoEsperaBloqueoMs: 250);
+        var resultado = await repositorio.AgregarSiDisponibleAsync(new Reserva
+        {
+            Id = Guid.NewGuid(),
+            UsuarioId = usuario.Id,
+            Espacio = "SALON A",
+            Fecha = Fecha.Date,
+            HoraInicio = new TimeSpan(10, 0, 0),
+            HoraFin = new TimeSpan(12, 0, 0),
+            Estado = EstadoReserva.Solicitada,
+            CreadaEn = DateTime.UtcNow
+        });
+
+        Assert.Equal(ResultadoAgregarReserva.BloqueoNoAdquirido, resultado);
+
+        await using var verificacion = NuevoContexto();
+        Assert.Empty(await verificacion.Reservas.AsNoTracking().ToListAsync());
     }
 
     // RF-NEG-02: dos creaciones concurrentes incompatibles se serializan en

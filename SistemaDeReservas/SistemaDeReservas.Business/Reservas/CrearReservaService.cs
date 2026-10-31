@@ -63,9 +63,12 @@ public class CrearReservaService
         };
 
         var guardada = await _reservas.AgregarSiDisponibleAsync(reserva, cancellationToken);
-        return guardada
-            ? ResultadoCreacionReserva.Creada(reserva)
-            : ResultadoCreacionReserva.ConflictoHorario();
+        return guardada switch
+        {
+            ResultadoAgregarReserva.Insertada => ResultadoCreacionReserva.Creada(reserva),
+            ResultadoAgregarReserva.Conflicto => ResultadoCreacionReserva.ConflictoHorario(),
+            _ => ResultadoCreacionReserva.BloqueoNoAdquirido()
+        };
     }
 
     /// <summary>

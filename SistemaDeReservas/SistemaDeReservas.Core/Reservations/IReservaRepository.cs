@@ -7,9 +7,11 @@ public interface IReservaRepository
     /// <summary>
     /// RF-NEG-02 y RD-04: inserta la reserva solo si no existe otra reserva
     /// bloqueante que se solape en el mismo espacio y fecha. La comprobación y
-    /// la inserción son atómicas en persistencia.
+    /// la inserción son atómicas en persistencia. Un fallo al adquirir el
+    /// bloqueo se informa como <see cref="ResultadoAgregarReserva.BloqueoNoAdquirido"/>,
+    /// no como conflicto de horario.
     /// </summary>
-    Task<bool> AgregarSiDisponibleAsync(
+    Task<ResultadoAgregarReserva> AgregarSiDisponibleAsync(
         Reserva reserva,
         CancellationToken cancellationToken = default);
 

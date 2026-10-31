@@ -8,13 +8,22 @@ namespace SistemaDeReservas.Infrastructure.Repositories;
 
 public class ReservaRepository : IReservaRepository
 {
-    private const int TiempoEsperaBloqueoMs = 15000;
+    private const int TiempoEsperaBloqueoPredeterminadoMs = 15000;
 
     private readonly AppDbContext _context;
+    private readonly int _tiempoEsperaBloqueoMs;
 
-    public ReservaRepository(AppDbContext context)
+    public ReservaRepository(AppDbContext context, int tiempoEsperaBloqueoMs = TiempoEsperaBloqueoPredeterminadoMs)
     {
+        if (tiempoEsperaBloqueoMs <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(tiempoEsperaBloqueoMs),
+                "El tiempo de espera del bloqueo debe ser positivo.");
+        }
+
         _context = context;
+        _tiempoEsperaBloqueoMs = tiempoEsperaBloqueoMs;
     }
 
     public async Task GuardarAsync(Reserva reserva, CancellationToken cancellationToken = default)
@@ -26,11 +35,12 @@ public class ReservaRepository : IReservaRepository
     /// <summary>
     /// RF-NEG-02 y RD-04: la comprobación de solapamiento y la inserción se
     /// ejecutan dentro de la misma transacción y bajo un bloqueo de aplicación
-    /// de SQL Server (<c>sp_getapplock</c>) por espacio y fecha. Dos creaciones
+    /// de SQL Server (<c>sp_getapplock</c>) por fecha. Dos creaciones
     /// concurrentes incompatibles se serializan: la segunda ve la fila de la
-    /// primera y se rechaza, en lugar de guardar un duplicado.
+    /// primera y se rechaza, en lugar de guardar un duplicado. Un fallo al
+    /// adquirir el bloqueo no se confunde con un conflicto de horario.
     /// </summary>
-    public async Task<bool> AgregarSiDisponibleAsync(
+    public async Task<ResultadoAgregarReserva> AgregarSiDisponibleAsync(
         Reserva reserva,
         CancellationToken cancellationToken = default)
     {
@@ -38,10 +48,11 @@ public class ReservaRepository : IReservaRepository
 
         try
         {
-            if (!await AdquirirBloqueoAsync(reserva, cancellationToken))
+            var codigoBloqueo = await AdquirirBloqueoAsync(reserva, cancellationToken);
+            if (codigoBloqueo < 0)
             {
                 await transaccion.RollbackAsync(cancellationToken);
-                return false;
+                return ResultadoAgregarReserva.BloqueoNoAdquirido;
             }
 
             var fecha = reserva.Fecha.Date;
@@ -58,13 +69,13 @@ public class ReservaRepository : IReservaRepository
             if (hayConflicto)
             {
                 await transaccion.RollbackAsync(cancellationToken);
-                return false;
+                return ResultadoAgregarReserva.Conflicto;
             }
 
             _context.Reservas.Add(reserva);
             await _context.SaveChangesAsync(cancellationToken);
             await transaccion.CommitAsync(cancellationToken);
-            return true;
+            return ResultadoAgregarReserva.Insertada;
         }
         catch
         {
@@ -124,7 +135,7 @@ public class ReservaRepository : IReservaRepository
     /// <c>sp_getapplock</c> es binaria y la intercalación de la columna puede
     /// considerar iguales nombres que la normalización no colapsa.
     /// </summary>
-    private async Task<bool> AdquirirBloqueoAsync(
+    private async Task<int> AdquirirBloqueoAsync(
         Reserva reserva,
         CancellationToken cancellationToken)
     {
@@ -138,9 +149,12 @@ public class ReservaRepository : IReservaRepository
         };
         var espera = new SqlParameter("@espera", SqlDbType.Int)
         {
-            Value = TiempoEsperaBloqueoMs
+            Value = _tiempoEsperaBloqueoMs
         };
 
+        // ExecuteSqlRawAsync usa la conexión y la transacción actuales del
+        // contexto, de modo que el bloqueo, la consulta y la inserción
+        // comparten la misma sesión y la misma transacción.
         await _context.Database.ExecuteSqlRawAsync(
             "EXEC @codigo = sp_getapplock " +
             "@Resource = @recurso, @LockMode = 'Exclusive', " +
@@ -148,6 +162,6 @@ public class ReservaRepository : IReservaRepository
             new object[] { codigo, recurso, espera },
             cancellationToken);
 
-        return Convert.ToInt32(codigo.Value) >= 0;
+        return Convert.ToInt32(codigo.Value);
     }
 }
