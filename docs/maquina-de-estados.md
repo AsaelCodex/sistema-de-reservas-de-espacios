@@ -91,13 +91,15 @@ Ningún controlador, servicio ni documento de configuración duplica la tabla.
 
 `TransicionReservaService.TransicionarAsync(reservaId, destino, actor)`
 consulta la reserva y evalúa la transición contra la tabla única. Un rechazo
-por transición inválida o por condición incumplida:
+por transición inválida, por condición incumplida o por actor inválido:
 
-- devuelve un resultado controlado (`TransicionProhibida` o
-  `CondicionIncumplida`) con mensaje comprensible;
+- devuelve un resultado controlado (`TransicionProhibida`,
+  `CondicionIncumplida` o `ActorInvalido`) con mensaje comprensible;
 - conserva el estado original de la reserva;
 - no ejecuta la actualización del repositorio.
 
-Una reserva inexistente devuelve `ReservaNoEncontrada` sin tocar el
-repositorio. La reserva nace en `Solicitada` y se persiste en la tabla
-`Reservas` (migración `AddReservas`).
+Un actor ausente, sin identificador (`Guid.Empty`) o con un rol fuera del enum
+se rechaza como `ActorInvalido` antes de evaluar la tabla. Una reserva
+inexistente devuelve `ReservaNoEncontrada` sin tocar el repositorio. La reserva
+nace en `Solicitada` y se persiste en la tabla `Reservas` (migración
+`AddReservas`).

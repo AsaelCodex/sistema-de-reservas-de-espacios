@@ -21,17 +21,28 @@ validada** por Control de Acceso (`SesionService.ConsultarUsuarioAsync`).
 - La autorización se verifica del lado del servidor; ocultar la operación en la
   interfaz no cuenta.
 
+`ActorReserva` es solo el contexto de dominio que consumen las reglas del
+negocio: **no autentica ni demuestra por sí mismo que exista una sesión
+válida**. La autenticación y la construcción del actor son responsabilidad de
+cada futuro endpoint, que deberá validar la credencial con `SesionService` y
+crear el `ActorReserva` a partir del usuario autenticado. Un `ActorReserva`
+armado con datos de la petición no cuenta como autorización.
+
+Un actor ausente, sin identificador (`Guid.Empty`) o con un rol fuera del enum
+se rechaza con un resultado controlado (`ActorInvalido`) antes de evaluar la
+transición, aunque su identificador coincida con el propietario de la reserva.
+
 ## Operaciones previstas
 
-| Operación | Autorización |
-|---|---|
-| Crear reserva | Usuario autenticado; la operación de creación consulta `AutorizacionPermisosService` para `Permiso.CrearReserva`. |
-| Consultar reservas propias | Usuario autenticado; solo sus reservas. |
-| Consultar reservas para gestión | Administrador. |
-| Confirmar reserva | Administrador. |
-| Rechazar reserva | Administrador. |
-| Cancelar reserva | Propietario de la reserva o Administrador. |
-| Finalizar reserva | Administrador. |
+| Operación | Autorización | Estado en la práctica 3 |
+|---|---|---|
+| Crear reserva | Usuario autenticado; la operación de creación consulta `AutorizacionPermisosService` para `Permiso.CrearReserva`. | Futura: no implementada. |
+| Consultar reservas propias | Usuario autenticado; solo sus reservas. | Futura: no implementada. |
+| Consultar reservas para gestión | Administrador. | Futura: no implementada. |
+| Confirmar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
+| Rechazar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
+| Cancelar reserva | Propietario de la reserva o Administrador. | Regla de transición implementada; operación y endpoint futuros. |
+| Finalizar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
 
 La consulta del permiso `Permiso.CrearReserva` pertenece a la futura operación
 de creación. El servicio de transiciones no la evalúa: mezclar ambas
@@ -51,12 +62,13 @@ prohibidas están en `docs/maquina-de-estados.md`; la fuente única en código e
 `Core/Reservations/TransicionesReserva.cs`. No se repiten aquí para no duplicar
 reglas.
 
-Un rechazo por transición inválida o por condición incumplida devuelve un
-resultado controlado (`TransicionProhibida` o `CondicionIncumplida`), conserva
-el estado original y **no** ejecuta la actualización del repositorio. Una
-reserva inexistente devuelve `ReservaNoEncontrada`.
+Un rechazo por transición inválida, por condición incumplida o por actor
+inválido devuelve un resultado controlado (`TransicionProhibida`,
+`CondicionIncumplida` o `ActorInvalido`), conserva el estado original y **no**
+ejecuta la actualización del repositorio. Una reserva inexistente devuelve
+`ReservaNoEncontrada`.
 
-## Operaciones pendientes
+## Operaciones pendientes del módulo
 
 Todavía **no** están implementadas y no forman parte de esta tarea:
 
@@ -64,7 +76,16 @@ Todavía **no** están implementadas y no forman parte de esta tarea:
 - Consulta de reservas propias y consulta para gestión.
 - Endpoints de reservas y su exposición protegida.
 - Integración completa reservas–permisos.
-- Notificaciones, reportes y adjuntos del dominio.
+
+## Fuera del alcance de la práctica 3
+
+No forman parte de esta entrega ni se consideran pendientes obligatorios de la
+práctica 3:
+
+- Notificaciones propias del dominio (RF-NEG-07 / RF-NOT-03): pieza de
+  Notificaciones (S11-S12).
+- Reportes agregados (RF-NEG-08 / RF-REP-02): pieza de Reportes (S12).
+- Adjuntos de documentos (RF-NEG-10): pieza de Documentos (S9).
 
 Por eso RF-NEG-02 (cinco funcionalidades separables) y RF-NEG-06 (operaciones
 protegidas por Control de Acceso) quedan **en desarrollo**: el contrato y la
