@@ -195,7 +195,9 @@ public class ReservaPersistenciaTests : BasePruebaPersistencia
     }
 
     // RF-NEG-02: dos creaciones concurrentes incompatibles se serializan en
-    // SQL Server; solo una queda guardada.
+    // SQL Server; solo una queda guardada. El interceptor retiene ambas hasta
+    // que las dos alcanzan sp_getapplock, de modo que la competencia es real y
+    // no depende del orden de ejecución de las tareas.
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-NEG-02")]
@@ -206,23 +208,35 @@ public class ReservaPersistenciaTests : BasePruebaPersistencia
         await OtorgarCrearReservaAsync(primerUsuario.Id);
         await OtorgarCrearReservaAsync(segundoUsuario.Id);
 
+        var coordinador = new CoordinadorBloqueoInterceptor();
+
         // Mismo espacio con distinta capitalización y espacios externos, y
-        // franjas que se solapan parcialmente.
+        // franjas que se solapan parcialmente. Cada llamada usa su propio
+        // contexto y su propia conexión física (Pooling=False).
         var primera = CrearReservaAsync(
             primerUsuario.Id, Rol.Estandar, "SALON A", Fecha,
-            new TimeSpan(10, 0, 0), new TimeSpan(12, 0, 0));
+            new TimeSpan(10, 0, 0), new TimeSpan(12, 0, 0),
+            coordinador);
         var segunda = CrearReservaAsync(
             segundoUsuario.Id, Rol.Estandar, "  salon a  ", Fecha,
-            new TimeSpan(11, 0, 0), new TimeSpan(13, 0, 0));
+            new TimeSpan(11, 0, 0), new TimeSpan(13, 0, 0),
+            coordinador);
 
-        var resultados = await Task.WhenAll(primera, segunda);
+        // Una excepción o un tiempo agotado hacen fallar la prueba: no se
+        // aceptan como resultados válidos.
+        var resultados = await Task.WhenAll(primera, segunda)
+            .WaitAsync(TimeSpan.FromSeconds(30));
 
+        Assert.Equal(2, coordinador.Llegadas);
         Assert.Equal(
             1,
             resultados.Count(r => r.Estado == EstadoCreacionReserva.Creada));
         Assert.Equal(
             1,
             resultados.Count(r => r.Estado == EstadoCreacionReserva.ConflictoHorario));
+        Assert.DoesNotContain(
+            resultados,
+            r => r.Estado == EstadoCreacionReserva.BloqueoNoAdquirido);
 
         await using var contexto = NuevoContexto();
         var guardadas = await contexto.Reservas.AsNoTracking().ToListAsync();

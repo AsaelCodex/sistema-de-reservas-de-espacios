@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using SistemaDeReservas.Business.GestionPermisos;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Permissions;
@@ -96,12 +97,16 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
         await EliminarBaseAsync(cadena);
     }
 
-    protected AppDbContext NuevoContexto()
+    protected AppDbContext NuevoContexto(params IInterceptor[] interceptores)
     {
-        var opciones = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlServer(CadenaConexion)
-            .Options;
-        return new AppDbContext(opciones);
+        var constructor = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(CadenaConexion);
+        if (interceptores.Length > 0)
+        {
+            constructor.AddInterceptors(interceptores);
+        }
+
+        return new AppDbContext(constructor.Options);
     }
 
     protected async Task<Usuario> CrearUsuarioAsync(Rol rol = Rol.Estandar)
@@ -199,9 +204,12 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
         string espacio,
         DateTime fecha,
         TimeSpan horaInicio,
-        TimeSpan horaFin)
+        TimeSpan horaFin,
+        IInterceptor? interceptor = null)
     {
-        await using var contexto = NuevoContexto();
+        await using var contexto = interceptor is null
+            ? NuevoContexto()
+            : NuevoContexto(interceptor);
         var servicio = new CrearReservaService(
             new ReservaRepository(contexto),
             new AutorizacionPermisosService(
