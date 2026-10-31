@@ -76,18 +76,34 @@ en memoria como en la consulta de persistencia:
 - Los horarios consecutivos (por ejemplo, 10:00-12:00 y 12:00-14:00) son
   válidos.
 - El nombre del espacio se normaliza con `Trim` y `ToUpperInvariant` antes de
-  guardarlo y antes de compararlo. El valor canónico se persiste, de modo que
-  diferencias de mayúsculas o espacios externos no evaden la comprobación.
+  guardarlo. La consulta de persistencia compara `TRIM(UPPER(Espacio))` con el
+  valor canónico, de modo que las filas antiguas sin normalizar también
+  bloquean: diferencias de mayúsculas o espacios externos no evaden la
+  comprobación.
+- El bloqueo de aplicación se toma por **fecha**, no por espacio. La comparación
+  del recurso de `sp_getapplock` es binaria, mientras que la columna puede usar
+  una intercalación que considere iguales nombres que la normalización no
+  colapsa (por ejemplo, acentos). Al serializar todas las creaciones de una
+  fecha, cualquier par de nombres que SQL considere iguales compite por el
+  mismo bloqueo y no pueden insertarse reservas incompatibles.
 
 La comprobación y la inserción no son una consulta seguida de un guardado sin
 protección. `ReservaRepository.AgregarSiDisponibleAsync` abre una transacción,
 toma un bloqueo exclusivo de aplicación de SQL Server (`sp_getapplock`) por
-espacio normalizado y fecha, comprueba el solapamiento y, solo si no hay
-conflicto, inserta y confirma. Dos creaciones concurrentes incompatibles se
-serializan: la segunda ve la fila de la primera y se rechaza con
-`ConflictoHorario`. La prueba de persistencia
-`Crear_ConcurrentIncompatibleAttempts_LeavesOnlyOneReservation` verifica que
-solo queda una fila.
+fecha y comprueba el solapamiento. El bloqueo, la consulta y la inserción usan
+la misma conexión y la misma transacción, y los parámetros SQL se envían
+parametrizados. Solo se consulta e inserta cuando el código de retorno de
+`sp_getapplock` es mayor o igual que cero; un código negativo revierte la
+transacción y devuelve `BloqueoNoAdquirido`, que es una causa distinta de
+`ConflictoHorario`. Dos creaciones concurrentes incompatibles se serializan: la
+segunda ve la fila de la primera y se rechaza con `ConflictoHorario`. La prueba
+de persistencia
+`Crear_ConcurrentIncompatibleAttempts_LeavesOnlyOneReservation` coordina ambas
+operaciones hasta que las dos alcanzan `sp_getapplock`, usa contextos y
+conexiones independientes y verifica una creación, un conflicto y una única
+fila. La prueba `Crear_WhenDateLockIsHeld_ReturnsLockNotAcquiredWithoutInsert`
+retiene el bloqueo desde otra transacción y verifica que no se inserta nada y
+que el resultado no es un conflicto de horario.
 
 Las consultas se resuelven en el repositorio (no en memoria) y ordenan por
 `Fecha`, `HoraInicio` e `Id` para que el resultado sea determinista.
