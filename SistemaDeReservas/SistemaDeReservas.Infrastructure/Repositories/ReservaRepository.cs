@@ -1,8 +1,6 @@
 using System.Data;
-using System.Globalization;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Infrastructure.Data;
 
@@ -50,7 +48,7 @@ public class ReservaRepository : IReservaRepository
             var estadosBloqueantes = DisponibilidadReserva.EstadosBloqueantes;
             var hayConflicto = await _context.Reservas.AnyAsync(
                 existente =>
-                    existente.Espacio == reserva.Espacio &&
+                    existente.Espacio.Trim().ToUpper() == reserva.Espacio &&
                     existente.Fecha == fecha &&
                     estadosBloqueantes.Contains(existente.Estado) &&
                     reserva.HoraInicio < existente.HoraFin &&
@@ -122,37 +120,34 @@ public class ReservaRepository : IReservaRepository
 
     /// <summary>
     /// Toma un bloqueo exclusivo de aplicación ligado a la transacción actual.
-    /// El recurso se identifica por espacio normalizado y fecha, que es la
-    /// unidad sobre la que se decide la disponibilidad.
+    /// El recurso se identifica por fecha, no por espacio: la comparación de
+    /// <c>sp_getapplock</c> es binaria y la intercalación de la columna puede
+    /// considerar iguales nombres que la normalización no colapsa.
     /// </summary>
     private async Task<bool> AdquirirBloqueoAsync(
         Reserva reserva,
         CancellationToken cancellationToken)
     {
-        var transaccion = _context.Database.CurrentTransaction
-            ?? throw new InvalidOperationException("La inserción requiere una transacción activa.");
-        var sqlTransaction = (SqlTransaction)transaccion.GetDbTransaction();
-        var conexion = (SqlConnection)sqlTransaction.Connection!;
-
-        await using var comando = conexion.CreateCommand();
-        comando.Transaction = sqlTransaction;
-        comando.CommandText =
-            "DECLARE @resultado int; " +
-            "EXEC @resultado = sp_getapplock " +
-            "@Resource = @recurso, @LockMode = 'Exclusive', " +
-            "@LockOwner = 'Transaction', @LockTimeout = @espera; " +
-            "SELECT @resultado;";
-        comando.Parameters.Add(new SqlParameter("@recurso", SqlDbType.NVarChar, 255)
+        var codigo = new SqlParameter("@codigo", SqlDbType.Int)
         {
-            Value = $"Reserva:{reserva.Espacio}|{reserva.Fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
-        });
-        comando.Parameters.Add(new SqlParameter("@espera", SqlDbType.Int)
+            Direction = ParameterDirection.Output
+        };
+        var recurso = new SqlParameter("@recurso", SqlDbType.NVarChar, 255)
+        {
+            Value = DisponibilidadReserva.RecursoBloqueo(reserva.Fecha)
+        };
+        var espera = new SqlParameter("@espera", SqlDbType.Int)
         {
             Value = TiempoEsperaBloqueoMs
-        });
+        };
 
-        var resultado = Convert.ToInt32(
-            await comando.ExecuteScalarAsync(cancellationToken));
-        return resultado >= 0;
+        await _context.Database.ExecuteSqlRawAsync(
+            "EXEC @codigo = sp_getapplock " +
+            "@Resource = @recurso, @LockMode = 'Exclusive', " +
+            "@LockOwner = 'Transaction', @LockTimeout = @espera;",
+            new object[] { codigo, recurso, espera },
+            cancellationToken);
+
+        return Convert.ToInt32(codigo.Value) >= 0;
     }
 }

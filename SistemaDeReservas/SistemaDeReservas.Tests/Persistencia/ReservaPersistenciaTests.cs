@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
+using SistemaDeReservas.Infrastructure.Repositories;
 
 namespace SistemaDeReservas.Tests.Persistencia;
 
@@ -101,6 +102,42 @@ public class ReservaPersistenciaTests : BasePruebaPersistencia
         var sinReservas = await ListarPropiasAsync(Guid.NewGuid(), Rol.Estandar);
         Assert.Equal(EstadoListadoReservas.Listada, sinReservas.Estado);
         Assert.Empty(sinReservas.Reservas);
+    }
+
+    // RF-NEG-02: una fila previa con el nombre sin normalizar sigue bloqueando.
+    // La consulta compara con TRIM/UPPER de SQL, de modo que los espacios
+    // externos y las mayúsculas no permiten evadir la disponibilidad.
+    [LocalDbFact]
+    [Trait("Categoria", "Persistencia")]
+    [Trait("Requerimiento", "RF-NEG-02")]
+    public async Task Crear_WithExistingUnnormalizedSpace_IsBlocked()
+    {
+        var usuario = await CrearUsuarioAsync();
+        await OtorgarCrearReservaAsync(usuario.Id);
+
+        await using (var contexto = NuevoContexto())
+        {
+            await new ReservaRepository(contexto).GuardarAsync(new Reserva
+            {
+                Id = Guid.NewGuid(),
+                UsuarioId = usuario.Id,
+                Espacio = "  Salon A  ",
+                Fecha = Fecha,
+                HoraInicio = new TimeSpan(10, 0, 0),
+                HoraFin = new TimeSpan(12, 0, 0),
+                Estado = EstadoReserva.Solicitada,
+                CreadaEn = DateTime.UtcNow
+            });
+        }
+
+        var resultado = await CrearReservaAsync(
+            usuario.Id, Rol.Estandar, "SALON A", Fecha,
+            new TimeSpan(10, 0, 0), new TimeSpan(12, 0, 0));
+
+        Assert.Equal(EstadoCreacionReserva.ConflictoHorario, resultado.Estado);
+
+        await using var contextoVerificacion = NuevoContexto();
+        Assert.Single(await contextoVerificacion.Reservas.AsNoTracking().ToListAsync());
     }
 
     // RF-NEG-02: dos creaciones concurrentes incompatibles se serializan en

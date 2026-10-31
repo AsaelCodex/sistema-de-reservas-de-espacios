@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SistemaDeReservas.Core.Reservations;
 
 /// <summary>
@@ -43,7 +45,8 @@ public static class DisponibilidadReserva
     /// </summary>
     public static bool EntraEnConflicto(Reserva nueva, Reserva existente)
     {
-        return existente.Espacio == nueva.Espacio &&
+        return EspacioReserva.Normalizar(existente.Espacio) ==
+                   EspacioReserva.Normalizar(nueva.Espacio) &&
                existente.Fecha.Date == nueva.Fecha.Date &&
                Bloquea(existente.Estado) &&
                SeSolapan(
@@ -51,5 +54,19 @@ public static class DisponibilidadReserva
                    nueva.HoraFin,
                    existente.HoraInicio,
                    existente.HoraFin);
+    }
+
+    /// <summary>
+    /// Recurso del bloqueo de aplicación. Se usa la fecha, no el espacio,
+    /// porque la comparación de <c>sp_getapplock</c> es binaria y la
+    /// intercalación de la columna puede considerar iguales nombres que la
+    /// normalización de la aplicación no colapsa (por ejemplo, acentos). Al
+    /// serializar todas las creaciones de una fecha, cualquier par de nombres
+    /// que SQL considere iguales compite por el mismo bloqueo.
+    /// </summary>
+    public static string RecursoBloqueo(DateTime fecha)
+    {
+        return "ReservaFecha:" +
+               fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 }
