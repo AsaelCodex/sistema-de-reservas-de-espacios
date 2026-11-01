@@ -10,15 +10,17 @@
 Sistema para gestionar la reserva de espacios y equipos (salones,
 canchas, equipos) por horario, evitando conflictos de disponibilidad.
 
-Actualmente el **Pieza 1 - Control de Acceso** está implementado y
-verificado (RF-CA-01 a RF-CA-22): registro con correo único,
+Actualmente la **Pieza 1 - Control de Acceso** está implementada y
+verificada (RF-CA-01 a RF-CA-22): registro con correo único,
 contraseñas almacenadas con hash, inicio y cierre de sesión, roles
 Administrador y Estándar, autorización verificada del lado del servidor,
 activación de cuenta por enlace, bloqueo por intentos fallidos, y
-recuperación, cambio y restablecimiento de contraseñas. También está
-implementada la **máquina de estados del negocio** (`Reserva`,
-RF-NEG-03 a RF-NEG-05 y RF-NEG-09) sobre la que se construirá el
-módulo de reservas.
+recuperación, cambio y restablecimiento de contraseñas. La **Pieza 2 -
+Gestión de Permisos** (RF-GP-01 a RF-GP-07) también está implementada y
+verificada. El **módulo de negocio** expone la creación, las consultas y
+las transiciones de reservas mediante endpoints protegidos: máquina de
+estados (RF-NEG-03 a RF-NEG-05 y RF-NEG-09), creación y consultas
+(RF-NEG-02) y operaciones protegidas por Control de Acceso (RF-NEG-06).
 
 ## Arquitectura
 
@@ -33,15 +35,17 @@ módulo de reservas.
 ## Estado actual
 
 - **Verificado:** los 22 requisitos de Control de Acceso (RF-CA-01 a
-  RF-CA-22) y la máquina de estados del negocio (RF-NEG-03, RF-NEG-04,
-  RF-NEG-05 y RF-NEG-09). El detalle y la evidencia están en
-  `docs/matriz-requisitos.md`.
-- **Pruebas:** 303 casos en verde (213 métodos de prueba, las teorías se
-  expanden): 294 casos sin LocalDB —negocio con fakes, seguridad, correo y
-  controladores invocados en memoria, sin servidor HTTP— y 9 casos de
-  persistencia sobre SQL Server LocalDB (`SistemaDeReservas.Tests/
-  Persistencia`), con una base propia por prueba que se elimina al
-  terminar.
+  RF-CA-22), los 7 de Gestión de Permisos (RF-GP-01 a RF-GP-07), la
+  máquina de estados del negocio (RF-NEG-03, RF-NEG-04, RF-NEG-05 y
+  RF-NEG-09), la creación y las consultas de reservas (RF-NEG-02) y las
+  operaciones del negocio protegidas por Control de Acceso (RF-NEG-06).
+  El detalle y la evidencia están en `docs/matriz-requisitos.md`.
+- **Pruebas:** 454 casos en verde (274 métodos de prueba, las teorías se
+  expanden): 439 casos sin LocalDB —negocio con fakes, seguridad, correo,
+  controladores invocados en memoria y el flujo real permisos–reservas con
+  repositorios de prueba— y 15 casos de persistencia sobre SQL Server
+  LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una base propia por
+  prueba que se elimina al terminar.
 - **Endpoints:**
 
 | Método y ruta | Descripción | Rol |
@@ -65,19 +69,26 @@ módulo de reservas.
 | `GET /api/solicitudes-permisos/pendientes` | Cola de solicitudes por resolver | Administrador |
 | `PUT /api/solicitudes-permisos/{id}/aprobar` | Aprobar (aplica el permiso; 403 si es la propia) | Administrador |
 | `PUT /api/solicitudes-permisos/{id}/rechazar` | Rechazar con motivo (400 si falta) | Administrador |
+| `POST /api/reservas` | Crear reserva (permiso `CrearReserva`; 409 si se solapa) | Autenticado |
+| `GET /api/reservas/mias` | Reservas propias del usuario de la sesión | Autenticado |
+| `GET /api/reservas` | Reservas para gestión | Administrador |
+| `PUT /api/reservas/{id}/confirmar` | Confirmar (409 si la transición no procede) | Administrador |
+| `PUT /api/reservas/{id}/rechazar` | Rechazar (409 si la transición no procede) | Administrador |
+| `PUT /api/reservas/{id}/cancelar` | Cancelar (propietario o Administrador) | Autenticado |
+| `PUT /api/reservas/{id}/finalizar` | Finalizar (solo desde `Confirmada`) | Administrador |
 
-- **Pendiente (piezas posteriores):** Gestión de Permisos (RF-GP),
-  Manejador de Documentos (RF-DOC), Notificaciones (RF-NOT-01 a
-  RF-NOT-07; la cola de correos RF-NOT-08 a RF-NOT-13 ya está
-  implementada), Reportes (RF-REP), Auditoría (RF-AUD) y el resto del
-  módulo de negocio (RF-NEG, salvo su máquina de estados).
+- **Pendiente (piezas posteriores):** Manejador de Documentos (RF-DOC),
+  Notificaciones (RF-NOT-01 a RF-NOT-07; la cola de correos RF-NOT-08 a
+  RF-NOT-13 ya está implementada), Reportes (RF-REP), Auditoría (RF-AUD)
+  y el resto del módulo de negocio (RF-NEG-01, RF-NEG-07, RF-NEG-08 y
+  RF-NEG-10).
 
 ## Requisitos
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` debe mostrar 10.x)
 - Git
 - SQL Server (LocalDB, Express o superior) para ejecutar la API y para
-  las 9 pruebas de persistencia (si no está disponible, esas pruebas se
+  las 15 pruebas de persistencia (si no está disponible, esas pruebas se
   omiten con el motivo; ver «Pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
@@ -126,6 +137,161 @@ dotnet run --project SistemaDeReservas/SistemaDeReservas.API
 ```
 
 La API queda disponible en `http://localhost:5137`.
+
+## Sesión, permisos y reservas (práctica 3)
+
+Los ejemplos usan PowerShell y `curl.exe`. Los cuerpos JSON deben enviarse
+en UTF-8 porque el campo de contraseña se llama `contraseña`.
+
+### 1. Sesión de Estándar
+
+Registrar la cuenta (nace inactiva) y activarla con el enlace que llega a la
+cola de correos:
+
+```powershell
+$base = "http://localhost:5137"
+
+curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
+  -d '{"nombre":"Estandar Demo","correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}'
+
+$eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9]+)').Groups[1].Value
+curl.exe -s "$base/activar?token=$activacion"
+```
+
+Iniciar sesión y guardar el token:
+
+```powershell
+$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
+  -H "Content-Type: application/json" `
+  -d '{"correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
+$std = "Bearer $($respuesta.token)"
+```
+
+### 2. Sesión de Administrador
+
+El registro (`POST /api/usuarios`) siempre crea un Estándar y **no existe
+seed ni endpoint para el primer Administrador**. Para una base recién
+migrada, registrar y activar la cuenta igual que en el paso anterior y
+promoverla en la base:
+
+```powershell
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d SistemaDeReservas `
+  -Q "UPDATE Usuarios SET Rol = 0 WHERE Correo = 'admin@itla.edu.do'"
+```
+
+`Rol = 0` corresponde a `Administrador`. Después, iniciar sesión con esa
+cuenta y guardar su token en `$adm`:
+
+```powershell
+$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
+  -H "Content-Type: application/json" `
+  -d '{"correo":"admin@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
+$adm = "Bearer $($respuesta.token)"
+```
+
+`docs/gestion-permisos.md` §5 describe un seeder idempotente como decisión,
+pero el código actual **no lo implementa**; por eso el primer Administrador
+se crea con el `UPDATE` anterior.
+
+### 3. Solicitar y aprobar el permiso
+
+Un Estándar necesita `Permiso.CrearReserva` para crear reservas. La solicitud
+nace `Pendiente` y la resuelve un Administrador:
+
+```powershell
+# 201: {"id":"...","permiso":"CrearReserva","estado":"Pendiente",...}
+curl.exe -s -X POST "$base/api/solicitudes-permisos" `
+  -H "Authorization: $std" -H "Content-Type: application/json" `
+  -d '{"permiso":"CrearReserva"}'
+
+# 200: la solicitud queda Aplicada y el permiso se concede
+curl.exe -s -X PUT "$base/api/solicitudes-permisos/<id-solicitud>/aprobar" `
+  -H "Authorization: $adm"
+```
+
+Mientras la solicitud siga `Pendiente`, `POST /api/reservas` responde 403 y
+no inserta nada. Aprobar dos veces la misma solicitud responde 409.
+
+### 4. Crear y consultar reservas
+
+```powershell
+# 201: reserva creada en estado Solicitada
+curl.exe -s -X POST "$base/api/reservas" `
+  -H "Authorization: $std" -H "Content-Type: application/json" `
+  -d '{"espacio":"SALON A","fecha":"2027-01-15T00:00:00","horaInicio":"10:00:00","horaFin":"12:00:00"}'
+
+# 200: solo las reservas del usuario de la sesión
+curl.exe -s "$base/api/reservas/mias" -H "Authorization: $std"
+
+# 200: todas las reservas (Administrador)
+curl.exe -s "$base/api/reservas" -H "Authorization: $adm"
+```
+
+Respuesta de una reserva:
+
+```json
+{
+  "id": "6f1c...",
+  "usuarioId": "0a2b...",
+  "espacio": "SALON A",
+  "fecha": "2027-01-15T00:00:00",
+  "horaInicio": "10:00:00",
+  "horaFin": "12:00:00",
+  "estado": "Solicitada",
+  "creadaEn": "2026-11-01T14:00:00Z"
+}
+```
+
+El cliente solo envía `espacio`, `fecha`, `horaInicio` y `horaFin`. El
+propietario, el rol, el estado inicial y `creadaEn` los fija el servidor a
+partir de la sesión; enviarlos en el cuerpo no cambia nada.
+
+### 5. Transiciones
+
+```powershell
+curl.exe -s -X PUT "$base/api/reservas/<id>/confirmar" -H "Authorization: $adm"
+curl.exe -s -X PUT "$base/api/reservas/<id>/rechazar"  -H "Authorization: $adm"
+curl.exe -s -X PUT "$base/api/reservas/<id>/cancelar"  -H "Authorization: $std"   # propietario
+curl.exe -s -X PUT "$base/api/reservas/<id>/finalizar" -H "Authorization: $adm"   # desde Confirmada
+```
+
+| Operación | Respuesta esperada |
+|---|---|
+| `POST /api/reservas` | 201 con la reserva en estado `Solicitada`. |
+| `GET /api/reservas/mias` | 200 con un arreglo de las reservas del usuario de la sesión. |
+| `GET /api/reservas` | 200 con un arreglo de todas las reservas. |
+| `PUT .../confirmar` | 200 con `estado: "Confirmada"`. |
+| `PUT .../rechazar` | 200 con `estado: "Rechazada"`. |
+| `PUT .../cancelar` | 200 con `estado: "Cancelada"`. |
+| `PUT .../finalizar` | 200 con `estado: "Finalizada"`. |
+
+### 6. Restricciones y códigos HTTP
+
+| Operación | Estándar propietario | Estándar ajeno | Administrador |
+|---|---|---|---|
+| `GET /api/reservas` | 403 | 403 | 200 |
+| `PUT .../confirmar` | 403 | 403 | 200 si la transición procede |
+| `PUT .../rechazar` | 403 | 403 | 200 si la transición procede |
+| `PUT .../finalizar` | 403 | 403 | 200 desde `Confirmada` |
+| `PUT .../cancelar` | 200 | 403 | 200 |
+| `GET /api/reservas/mias` | 200 solo las propias | 200 solo las propias | 200 solo las propias |
+
+| Código | Significado |
+|---|---|
+| 201 | Reserva creada. |
+| 200 | Consulta o transición exitosa. |
+| 400 | Entrada inválida (por ejemplo, `horaFin` anterior a `horaInicio`). |
+| 401 | Sesión ausente, desconocida, vencida o cerrada. |
+| 403 | Rol insuficiente, permiso `CrearReserva` ausente o condición de propietario incumplida. |
+| 404 | Reserva inexistente. |
+| 409 | Solapamiento de horario o transición prohibida. |
+| 503 | No se pudo adquirir el bloqueo de aplicación de SQL Server. |
+
+El 503 no se provoca con una petición normal: requiere que `sp_getapplock`
+falle. Está cubierto por la prueba automatizada
+`ReservasControllerTests.Post_WhenLockIsNotAcquired_ReturnsServiceUnavailable`.
 
 ## Cola de correos
 
@@ -180,41 +346,41 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **294 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
-  de correo y las pruebas de API, que invocan los controladores en memoria
-  (esta suite **no** usa `WebApplicationFactory` ni un servidor HTTP real,
-  por lo que no hay casos de integración HTTP). No necesitan base de datos
-  ni servidor.
-- **Entorno con persistencia**: los **9 casos de persistencia LocalDB**
+  **439 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  de correo, las pruebas de API, que invocan los controladores en memoria,
+  y el flujo real permisos–reservas con repositorios de prueba. Esta suite
+  **no** usa `WebApplicationFactory` ni un servidor HTTP real, por lo que
+  no hay casos de integración HTTP. No necesitan base de datos ni servidor.
+- **Entorno con persistencia**: los **15 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
   crea su propia base `Reservas_Tests_*`, aplica las migraciones sobre una
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 303 casos salen de **213 métodos de prueba**: 179 `[Fact]`, 25
-`[Theory]` y 9 `[LocalDbFact]`; las teorías se expanden en 115 casos con
+Los 454 casos salen de **274 métodos de prueba**: 209 `[Fact]`, 50
+`[Theory]` y 15 `[LocalDbFact]`; las teorías se expanden en 230 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
-# solo los 9 casos de persistencia LocalDB
+# solo los 15 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 294 casos sin LocalDB
+# solo los 439 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (303).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (454).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
-- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 9
+- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 15
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **303 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **294
-ejecutadas / 0 fallidas / 9 omitidas**.
+Con LocalDB disponible la corrida completa es **454 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **439
+ejecutadas / 0 fallidas / 15 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
 
@@ -232,9 +398,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 303 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 294 ejecutadas, 0 fallidas, **9 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 303 ejecutadas, **9 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 294 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 454 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 439 ejecutadas, 0 fallidas, **15 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 454 ejecutadas, **15 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 439 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -255,7 +421,13 @@ dotnet test SistemaDeReservas/SistemaDeReservas.sln
 Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 ```
 
-## Defectos
+## Defectos de la Práctica 2 (histórico)
+
+> Los conteos de esta sección (**303 casos**) corresponden a la suite de la
+> Práctica 2 en el momento en que se verificaron esos defectos. La suite
+> actual, con las operaciones y la integración de la Práctica 3, tiene 454
+> casos. Los resultados históricos no se reescriben ni se vuelven a atribuir
+> a la Práctica 3.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada
 contra los seis defectos de la variante A de la Práctica 2: cada uno se

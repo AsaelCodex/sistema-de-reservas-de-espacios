@@ -3,9 +3,10 @@
 Requisitos: RF-NEG-02, RF-NEG-06 y RD-04. Complementa
 `docs/maquina-de-estados.md` y `docs/requerimientos-core.md`.
 
-Este documento define las operaciones previstas del módulo de reservas y su
-autorización. Distingue lo implementado en la práctica 3 de lo que queda para
-bloques posteriores.
+Este documento define las operaciones del módulo de reservas y su
+autorización. Las siete operaciones están implementadas como servicios y
+expuestas por endpoints protegidos en la práctica 3; el flujo completo
+solicitud–aprobación–reserva está verificado con servicios reales.
 
 ## Actores
 
@@ -24,31 +25,70 @@ validada** por Control de Acceso (`SesionService.ConsultarUsuarioAsync`).
 `ActorReserva` es solo el contexto de dominio que consumen las reglas del
 negocio: **no autentica ni demuestra por sí mismo que exista una sesión
 válida**. La autenticación y la construcción del actor son responsabilidad de
-cada futuro endpoint, que deberá validar la credencial con `SesionService` y
-crear el `ActorReserva` a partir del usuario autenticado. Un `ActorReserva`
-armado con datos de la petición no cuenta como autorización.
+cada endpoint, que valida la credencial con `SesionService` y crea el
+`ActorReserva` a partir del usuario autenticado. Un `ActorReserva` armado con
+datos de la petición no cuenta como autorización.
 
 Un actor ausente, sin identificador (`Guid.Empty`) o con un rol fuera del enum
 se rechaza con un resultado controlado (`ActorInvalido`) antes de evaluar la
 operación, aunque su identificador coincida con el propietario de la reserva.
 
-## Operaciones previstas
+## Operaciones del módulo
 
-| Operación | Autorización | Estado en la práctica 3 |
-|---|---|---|
-| Crear reserva | Usuario autenticado; la operación de creación consulta `AutorizacionPermisosService` para `Permiso.CrearReserva`. | Servicio implementado (`CrearReservaService`); endpoint futuro. |
-| Consultar reservas propias | Usuario autenticado; solo sus reservas. | Servicio implementado (`ListadoReservasService`); endpoint futuro. |
-| Consultar reservas para gestión | Administrador. | Servicio implementado (`ListadoReservasService`); endpoint futuro. |
-| Confirmar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
-| Rechazar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
-| Cancelar reserva | Propietario de la reserva o Administrador. | Regla de transición implementada; operación y endpoint futuros. |
-| Finalizar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
+| Operación | Endpoint | Autorización | Estado en la práctica 3 |
+|---|---|---|---|
+| Crear reserva | `POST /api/reservas` | Usuario autenticado; consulta `AutorizacionPermisosService` para `Permiso.CrearReserva`. | Implementada (`CrearReservaService` + endpoint). |
+| Consultar reservas propias | `GET /api/reservas/mias` | Usuario autenticado; solo sus reservas. | Implementada (`ListadoReservasService` + endpoint). |
+| Consultar reservas para gestión | `GET /api/reservas` | Administrador. | Implementada (`ListadoReservasService` + endpoint). |
+| Confirmar reserva | `PUT /api/reservas/{id}/confirmar` | Administrador. | Implementada (`TransicionReservaService` + endpoint). |
+| Rechazar reserva | `PUT /api/reservas/{id}/rechazar` | Administrador. | Implementada (`TransicionReservaService` + endpoint). |
+| Cancelar reserva | `PUT /api/reservas/{id}/cancelar` | Propietario de la reserva o Administrador. | Implementada (`TransicionReservaService` + endpoint). |
+| Finalizar reserva | `PUT /api/reservas/{id}/finalizar` | Administrador. | Implementada (`TransicionReservaService` + endpoint). |
 
 La creación consulta el permiso `Permiso.CrearReserva` en el servicio real de
 autorización y rechaza sin guardar cuando no lo tiene. El rol Administrador
 conserva el comportamiento implícito del catálogo. El servicio de transiciones
 no evalúa ese permiso: mezclar ambas responsabilidades duplicaría reglas y
 rompería RD-01.
+
+## API expuesta
+
+`API/Controllers/ReservasController.cs` recibe y responde las peticiones; no
+contiene reglas de negocio. Cada operación:
+
+- declara `[RequiereRol]` con el nivel correspondiente (RF-CA-05);
+- valida la credencial con `SesionService.ConsultarUsuarioAsync` y responde
+  401 si falta o no sirve;
+- construye `ActorReserva` solo con el `Id` y el `Rol` del usuario de la
+  sesión, nunca con campos del cuerpo;
+- delega en `CrearReservaService`, `ListadoReservasService` o
+  `TransicionReservaService`, sin repetir condiciones de propietario ni la
+  tabla de estados.
+
+El DTO `CrearReservaRequest` solo acepta `espacio`, `fecha`, `horaInicio` y
+`horaFin`. Un `usuarioId`, `rol`, `estado` o `creadaEn` enviados por el
+cliente se ignoran porque el DTO no los expone.
+
+Mapeo de resultados:
+
+| Código | Resultado |
+|---|---|
+| 201 | Reserva creada. |
+| 200 | Consulta o transición exitosa. |
+| 400 | Entrada inválida. |
+| 401 | Sesión ausente, desconocida, vencida o cerrada. |
+| 403 | Rol insuficiente, permiso `CrearReserva` ausente o condición de propietario incumplida. |
+| 404 | Reserva inexistente. |
+| 409 | Conflicto de horario o transición prohibida. |
+| 503 | Bloqueo de aplicación no adquirido. |
+
+Las pruebas `ReservasControllerTests` ejecutan el `AutorizacionRolFilter` real
+para las restricciones de rol y los servicios reales del negocio con
+repositorios de prueba para el resto. El flujo real permisos–reservas está en
+`FlujoPermisosReservasTests` (repositorios de prueba) y
+`FlujoPermisosReservasPersistenciaTests` (EF Core sobre LocalDB), ambas con
+`CrearSolicitudPermisoService`, `ResolucionSolicitudService`,
+`AutorizacionPermisosService` y `CrearReservaService` reales.
 
 ## Reglas implementadas en esta tarea
 
@@ -63,6 +103,8 @@ rompería RD-01.
 | Creación con permiso, propietario = actor y estado inicial | `Business/Reservas/CrearReservaService.cs` | RF-NEG-02, RF-NEG-06, RD-07 |
 | Consultas propias y para gestión | `Business/Reservas/ListadoReservasService.cs` | RF-NEG-02, RF-NEG-06 |
 | Inserción atómica con bloqueo de aplicación | `Infrastructure/Repositories/ReservaRepository.cs` | RF-NEG-02, RD-04 |
+| Exposición protegida de las siete operaciones | `API/Controllers/ReservasController.cs` | RF-NEG-02, RF-NEG-06, RF-CA-05, RD-06 |
+| DTO que no acepta datos de autoridad del cliente | `API/Models/CrearReservaRequest.cs` | RF-NEG-02, RD-07 |
 
 ## Disponibilidad y concurrencia
 
@@ -119,13 +161,23 @@ inválido devuelve un resultado controlado (`TransicionProhibida`,
 ejecuta la actualización del repositorio. Una reserva inexistente devuelve
 `ReservaNoEncontrada`.
 
-## Operaciones pendientes del módulo
+## Integración verificada
 
-Todavía **no** están implementadas y no forman parte de esta tarea:
+El flujo completo está cubierto sin levantar la aplicación y sin sustituir
+los servicios del flujo:
 
-- Endpoints de reservas y su exposición protegida.
-- Integración completa del flujo solicitud–aprobación–reserva.
-- Prueba de integración de ese flujo completo.
+1. Un Estándar sin permiso intenta crear: se rechaza y no se inserta.
+2. Solicita `Permiso.CrearReserva` con `CrearSolicitudPermisoService`.
+3. Mientras la solicitud está `Pendiente`, crear sigue rechazándose.
+4. Otro usuario Administrador aprueba con `ResolucionSolicitudService`.
+5. La aprobación crea el `PermisoOtorgado` y
+   `AutorizacionPermisosService.PuedeAsync` lo confirma.
+6. Con los mismos datos válidos, `CrearReservaService` permite la creación y
+   la reserva queda en `Solicitada`.
+
+Las dos versiones (repositorios de prueba y EF Core sobre LocalDB) verifican
+resultados y efectos: ausencia de filas antes de la aprobación, permiso
+persistido y reserva persistida en estado `Solicitada`.
 
 ## Fuera del alcance de la práctica 3
 
@@ -137,7 +189,10 @@ práctica 3:
 - Reportes agregados (RF-NEG-08 / RF-REP-02): pieza de Reportes (S12).
 - Adjuntos de documentos (RF-NEG-10): pieza de Documentos (S9).
 
-Por eso RF-NEG-02 (cinco funcionalidades separables) y RF-NEG-06 (operaciones
-protegidas por Control de Acceso) quedan **en desarrollo**: la creación y las
-consultas existen como servicios probados, pero faltan los endpoints
-protegidos y la integración completa del flujo.
+RF-NEG-02 (cinco funcionalidades separables) y RF-NEG-06 (operaciones
+protegidas por Control de Acceso) quedan **verificados** en esta entrega: las
+siete operaciones están implementadas como servicios, expuestas por endpoints
+protegidos y cubiertas por pruebas que ejecutan el filtro de rol real; además,
+el flujo solicitud–aprobación–reserva se verifica con los servicios reales y
+con persistencia EF Core sobre LocalDB. La evidencia concreta está en
+`docs/matriz-requisitos.md`.
