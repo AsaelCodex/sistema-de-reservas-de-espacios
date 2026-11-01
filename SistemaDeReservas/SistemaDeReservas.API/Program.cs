@@ -5,6 +5,7 @@ using SistemaDeReservas.API.Workers;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.GestionPermisos;
 using SistemaDeReservas.Business.Notificaciones;
+using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
@@ -102,6 +103,9 @@ builder.Services.AddScoped<ListadoCorreosService>();
 builder.Services.AddScoped<CrearSolicitudPermisoService>();
 builder.Services.AddScoped<ListadoSolicitudesService>();
 builder.Services.AddScoped<ResolucionSolicitudService>();
+builder.Services.AddScoped<AutorizacionPermisosService>();
+builder.Services.AddScoped<CrearReservaService>();
+builder.Services.AddScoped<ListadoReservasService>();
 builder.Services.AddScoped<ProcesadorColaCorreos>();
 builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

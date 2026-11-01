@@ -1,7 +1,10 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Permissions;
+using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Data;
 using SistemaDeReservas.Infrastructure.Repositories;
@@ -94,12 +97,16 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
         await EliminarBaseAsync(cadena);
     }
 
-    protected AppDbContext NuevoContexto()
+    protected AppDbContext NuevoContexto(params IInterceptor[] interceptores)
     {
-        var opciones = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlServer(CadenaConexion)
-            .Options;
-        return new AppDbContext(opciones);
+        var constructor = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(CadenaConexion);
+        if (interceptores.Length > 0)
+        {
+            constructor.AddInterceptors(interceptores);
+        }
+
+        return new AppDbContext(constructor.Options);
     }
 
     protected async Task<Usuario> CrearUsuarioAsync(Rol rol = Rol.Estandar)
@@ -183,6 +190,51 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
             new UsuarioRepository(contexto),
             new PermisoOtorgadoRepository(contexto));
         return await servicio.PuedeAsync(usuarioId, permiso);
+    }
+
+    protected async Task OtorgarCrearReservaAsync(Guid usuarioId)
+    {
+        var solicitud = await CrearSolicitudAsync(usuarioId, EstadoSolicitudPermiso.Aplicada);
+        await OtorgarAsync(usuarioId, solicitud.Id);
+    }
+
+    protected async Task<ResultadoCreacionReserva> CrearReservaAsync(
+        Guid usuarioId,
+        Rol rol,
+        string espacio,
+        DateTime fecha,
+        TimeSpan horaInicio,
+        TimeSpan horaFin,
+        IInterceptor? interceptor = null)
+    {
+        await using var contexto = interceptor is null
+            ? NuevoContexto()
+            : NuevoContexto(interceptor);
+        var servicio = new CrearReservaService(
+            new ReservaRepository(contexto),
+            new AutorizacionPermisosService(
+                new UsuarioRepository(contexto),
+                new PermisoOtorgadoRepository(contexto)));
+        return await servicio.CrearAsync(
+            new ActorReserva(usuarioId, rol),
+            espacio,
+            fecha,
+            horaInicio,
+            horaFin);
+    }
+
+    protected async Task<ResultadoListadoReservas> ListarPropiasAsync(Guid usuarioId, Rol rol)
+    {
+        await using var contexto = NuevoContexto();
+        var servicio = new ListadoReservasService(new ReservaRepository(contexto));
+        return await servicio.ListarPropiasAsync(new ActorReserva(usuarioId, rol));
+    }
+
+    protected async Task<ResultadoListadoReservas> ListarParaGestionAsync(Guid usuarioId, Rol rol)
+    {
+        await using var contexto = NuevoContexto();
+        var servicio = new ListadoReservasService(new ReservaRepository(contexto));
+        return await servicio.ListarParaGestionAsync(new ActorReserva(usuarioId, rol));
     }
 
     private static async Task EliminarBaseAsync(string cadena)

@@ -30,23 +30,25 @@ armado con datos de la petición no cuenta como autorización.
 
 Un actor ausente, sin identificador (`Guid.Empty`) o con un rol fuera del enum
 se rechaza con un resultado controlado (`ActorInvalido`) antes de evaluar la
-transición, aunque su identificador coincida con el propietario de la reserva.
+operación, aunque su identificador coincida con el propietario de la reserva.
 
 ## Operaciones previstas
 
 | Operación | Autorización | Estado en la práctica 3 |
 |---|---|---|
-| Crear reserva | Usuario autenticado; la operación de creación consulta `AutorizacionPermisosService` para `Permiso.CrearReserva`. | Futura: no implementada. |
-| Consultar reservas propias | Usuario autenticado; solo sus reservas. | Futura: no implementada. |
-| Consultar reservas para gestión | Administrador. | Futura: no implementada. |
+| Crear reserva | Usuario autenticado; la operación de creación consulta `AutorizacionPermisosService` para `Permiso.CrearReserva`. | Servicio implementado (`CrearReservaService`); endpoint futuro. |
+| Consultar reservas propias | Usuario autenticado; solo sus reservas. | Servicio implementado (`ListadoReservasService`); endpoint futuro. |
+| Consultar reservas para gestión | Administrador. | Servicio implementado (`ListadoReservasService`); endpoint futuro. |
 | Confirmar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
 | Rechazar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
 | Cancelar reserva | Propietario de la reserva o Administrador. | Regla de transición implementada; operación y endpoint futuros. |
 | Finalizar reserva | Administrador. | Regla de transición implementada; operación y endpoint futuros. |
 
-La consulta del permiso `Permiso.CrearReserva` pertenece a la futura operación
-de creación. El servicio de transiciones no la evalúa: mezclar ambas
-responsabilidades duplicaría reglas y rompería RD-01.
+La creación consulta el permiso `Permiso.CrearReserva` en el servicio real de
+autorización y rechaza sin guardar cuando no lo tiene. El rol Administrador
+conserva el comportamiento implícito del catálogo. El servicio de transiciones
+no evalúa ese permiso: mezclar ambas responsabilidades duplicaría reglas y
+rompería RD-01.
 
 ## Reglas implementadas en esta tarea
 
@@ -56,6 +58,55 @@ responsabilidades duplicaría reglas y rompería RD-01.
 | Tabla única de transiciones con condiciones del actor | `Core/Reservations/TransicionesReserva.cs` | RF-NEG-04, RD-04 |
 | Actor construido desde la sesión validada | `Core/Reservations/ActorReserva.cs` | RF-NEG-06 |
 | Ejecución de la transición y rechazos controlados | `Business/Reservas/TransicionReservaService.cs` | RF-NEG-05, RD-07 |
+| Regla única de disponibilidad (estados bloqueantes y solapamiento) | `Core/Reservations/DisponibilidadReserva.cs` | RF-NEG-02, RD-04 |
+| Normalización del nombre del espacio | `Core/Reservations/EspacioReserva.cs` | RF-NEG-02, RD-07 |
+| Creación con permiso, propietario = actor y estado inicial | `Business/Reservas/CrearReservaService.cs` | RF-NEG-02, RF-NEG-06, RD-07 |
+| Consultas propias y para gestión | `Business/Reservas/ListadoReservasService.cs` | RF-NEG-02, RF-NEG-06 |
+| Inserción atómica con bloqueo de aplicación | `Infrastructure/Repositories/ReservaRepository.cs` | RF-NEG-02, RD-04 |
+
+## Disponibilidad y concurrencia
+
+La regla vive en `Core/Reservations/DisponibilidadReserva.cs` y se aplica tanto
+en memoria como en la consulta de persistencia:
+
+- `Solicitada` y `Confirmada` bloquean el espacio en su fecha y horario.
+- `Rechazada`, `Cancelada` y `Finalizada` no bloquean.
+- Dos franjas del mismo espacio y fecha se solapan cuando
+  `inicioNuevo < finExistente && finNuevo > inicioExistente`.
+- Los horarios consecutivos (por ejemplo, 10:00-12:00 y 12:00-14:00) son
+  válidos.
+- El nombre del espacio se normaliza con `Trim` y `ToUpperInvariant` antes de
+  guardarlo. La consulta de persistencia compara `TRIM(UPPER(Espacio))` con el
+  valor canónico, de modo que las filas antiguas sin normalizar también
+  bloquean: diferencias de mayúsculas o espacios externos no evaden la
+  comprobación.
+- El bloqueo de aplicación se toma por **fecha**, no por espacio. La comparación
+  del recurso de `sp_getapplock` es binaria, mientras que la columna puede usar
+  una intercalación que considere iguales nombres que la normalización no
+  colapsa (por ejemplo, acentos). Al serializar todas las creaciones de una
+  fecha, cualquier par de nombres que SQL considere iguales compite por el
+  mismo bloqueo y no pueden insertarse reservas incompatibles.
+
+La comprobación y la inserción no son una consulta seguida de un guardado sin
+protección. `ReservaRepository.AgregarSiDisponibleAsync` abre una transacción,
+toma un bloqueo exclusivo de aplicación de SQL Server (`sp_getapplock`) por
+fecha y comprueba el solapamiento. El bloqueo, la consulta y la inserción usan
+la misma conexión y la misma transacción, y los parámetros SQL se envían
+parametrizados. Solo se consulta e inserta cuando el código de retorno de
+`sp_getapplock` es mayor o igual que cero; un código negativo revierte la
+transacción y devuelve `BloqueoNoAdquirido`, que es una causa distinta de
+`ConflictoHorario`. Dos creaciones concurrentes incompatibles se serializan: la
+segunda ve la fila de la primera y se rechaza con `ConflictoHorario`. La prueba
+de persistencia
+`Crear_ConcurrentIncompatibleAttempts_LeavesOnlyOneReservation` coordina ambas
+operaciones hasta que las dos alcanzan `sp_getapplock`, usa contextos y
+conexiones independientes y verifica una creación, un conflicto y una única
+fila. La prueba `Crear_WhenDateLockIsHeld_ReturnsLockNotAcquiredWithoutInsert`
+retiene el bloqueo desde otra transacción y verifica que no se inserta nada y
+que el resultado no es un conflicto de horario.
+
+Las consultas se resuelven en el repositorio (no en memoria) y ordenan por
+`Fecha`, `HoraInicio` e `Id` para que el resultado sea determinista.
 
 Las condiciones del actor para cada transición y las veinte combinaciones
 prohibidas están en `docs/maquina-de-estados.md`; la fuente única en código es
@@ -72,10 +123,9 @@ ejecuta la actualización del repositorio. Una reserva inexistente devuelve
 
 Todavía **no** están implementadas y no forman parte de esta tarea:
 
-- Creación de reservas y consulta del permiso `Permiso.CrearReserva`.
-- Consulta de reservas propias y consulta para gestión.
 - Endpoints de reservas y su exposición protegida.
-- Integración completa reservas–permisos.
+- Integración completa del flujo solicitud–aprobación–reserva.
+- Prueba de integración de ese flujo completo.
 
 ## Fuera del alcance de la práctica 3
 
@@ -88,5 +138,6 @@ práctica 3:
 - Adjuntos de documentos (RF-NEG-10): pieza de Documentos (S9).
 
 Por eso RF-NEG-02 (cinco funcionalidades separables) y RF-NEG-06 (operaciones
-protegidas por Control de Acceso) quedan **en desarrollo**: el contrato y la
-regla de transición existen, pero faltan las operaciones y su exposición.
+protegidas por Control de Acceso) quedan **en desarrollo**: la creación y las
+consultas existen como servicios probados, pero faltan los endpoints
+protegidos y la integración completa del flujo.
