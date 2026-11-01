@@ -106,6 +106,7 @@ builder.Services.AddScoped<ResolucionSolicitudService>();
 builder.Services.AddScoped<AutorizacionPermisosService>();
 builder.Services.AddScoped<CrearReservaService>();
 builder.Services.AddScoped<ListadoReservasService>();
+builder.Services.AddScoped<TransicionReservaService>();
 builder.Services.AddScoped<ProcesadorColaCorreos>();
 builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
