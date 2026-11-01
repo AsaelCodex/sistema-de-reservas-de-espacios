@@ -70,7 +70,7 @@ Transiciones oficiales (copia literal de `requerimientos-core.md`, sección 4):
 | D-GP-05 | Duplicados: (a) una única solicitud `Pendiente` por usuario y permiso; (b) no se solicita un permiso ya concedido **explícitamente** (existe `PermisoOtorgado`); los permisos implícitos del Administrador (D-GP-07) no bloquean la solicitud; (c) tras un rechazo sí se permite una nueva solicitud. | El documento oficial no trata duplicados: son reglas propias, validadas en servicio (RD-07) e índice único filtrado en BD. El matiz de (b) es lo que hace que RF-GP-07 siga siendo provocable vía API con D-GP-07. |
 | D-GP-06 | Máquina de estados idéntica a la tabla oficial, en un solo componente de Core (§2). | RF-GP-06, RD-04, RF-NEG-09. |
 | D-GP-07 | El rol `Administrador` implica todos los permisos del catálogo: `PuedeAsync` devuelve `true` sin consultar `PermisoOtorgado`; el resto de usuarios consultan la tabla. **Punto de cambio:** cuando existan al menos dos administradores reales, puede pasarse a "todos requieren `PermisoOtorgado`" cambiando únicamente `AutorizacionPermisosService`, sus pruebas y este documento (entidades, tablas y servicios no cambian). El momento adecuado es **antes** de que exista la operación real de creación de reservas. | RF-GP-05; evita que un administrador único quede bloqueado (no puede aprobar su propia solicitud por RF-GP-07). |
-| D-GP-08 | La base de datos arranca con **dos cuentas de administrador** creadas por un seeder idempotente (§5). | Hace verificable RF-GP-07 de extremo a extremo y habilita la demostración de RF-GP-02/03/04/06 por API. |
+| D-GP-08 | El primer Administrador se obtiene registrando y activando una cuenta y promoviéndola con un `UPDATE` único por correo, verificando que cambió exactamente una fila (§5). Un seeder de dos administradores queda como **propuesta futura**, no implementada. | Hace verificable RF-GP-07 de extremo a extremo sin introducir código de arranque ni secretos, y habilita la demostración de RF-GP-02/03/04/06 por API. |
 
 ## 4. Verificación de RF-GP-05 (D-GP-03)
 
@@ -107,7 +107,7 @@ repositorio de permisos directamente), y en SQL Server lo confirma
 `Aprobar_RejectedRequest_PersistsNoGrant` (cero `PermisoOtorgado` en la base,
 leído con un contexto nuevo).
 
-## 5. Base de dos administradores (D-GP-08)
+## 5. Obtención del primer Administrador (D-GP-08)
 
 **Situación verificada en el código actual:**
 
@@ -118,32 +118,40 @@ leído con un contexto nuevo).
 - `CambioRolService` solo es invocable con rol Administrador
   (`AutorizacionRolFilter`).
 
-Conclusión: hoy **no hay forma de crear el primer administrador** por la API, y
-sin administradores la pieza no puede demostrarse por endpoints.
+Conclusión: la API no puede crear el primer Administrador por sí sola; para
+una base recién migrada se promueve una cuenta ya registrada y activada.
 
-**Decisión:** seeder idempotente que, al iniciar la API (tras aplicar las
-migraciones), crea dos cuentas de administrador **solo si sus correos no
-existen**:
+**Procedimiento implementado** (también en `README.md`, «Sesión de
+Administrador»):
 
-- `Activo = true`: el seeder **no es** la operación de registro
-  (`POST /api/usuarios`), por lo que no recorre el enlace de activación de
-  RF-CA-15. Se declara explícitamente para que no se le exija ese criterio.
-- Contraseña guardada con `IPasswordHasher` (`Pbkdf2PasswordHasher`):
-  RF-CA-02 / RD-05.
-- Correos y contraseñas **solo por variables de entorno**
-  (`Seed__Administradores__0__Correo`, `Seed__Administradores__1__Correo`,
-  `Seed__Password`): RD-10. Si no están definidas, el seeder no crea nada y la
-  API arranca igual.
-- Idempotente por correo único (RF-CA-01): reiniciar no duplica cuentas.
+1. Registrar la cuenta con `POST /api/usuarios` y activarla con el enlace de
+   `GET /activar?token=...`. La cuenta nace `Estandar` e inactiva.
+2. Promover **exclusivamente esa cuenta** con un `UPDATE` que use el correo
+   único (`IX_Usuarios_Correo`) y comprobar que exactamente una fila cambió:
 
-**Uso para RF-GP-07:** el administrador A crea su propia solicitud (D-GP-05(b)
-no se lo impide) e intenta aprobarla o rechazarla → recibe el rechazo exigido
-por el criterio; el administrador B sí puede resolverla. Con dos
-administradores además ninguno queda bloqueado si se aplica el "punto de
-cambio" de D-GP-07.
+   ```sql
+   UPDATE Usuarios SET Rol = 0 WHERE Correo = N'admin@itla.edu.do';
+   IF @@ROWCOUNT <> 1
+       THROW 50001, 'Se esperaba promover exactamente una cuenta.', 1;
+   ```
 
-**Interacción con RF-CA-20:** cada administrador no puede desactivarse a sí
-mismo, pero sí al otro; coherente con el requisito, sin cambios.
+   `Rol = 0` es `Administrador` (`Rol.Administrador`). La condición `WHERE`
+   es obligatoria: no debe ejecutarse un `UPDATE` sin ella.
+3. Iniciar una **sesión nueva** con esa cuenta (`POST /api/sesiones`) y
+   comprobar el rol con `GET /api/usuarios/yo`; la respuesta debe incluir
+   `"rol":"Administrador"`.
+
+Con este procedimiento queda disponible el Administrador que resuelve
+solicitudes (RF-GP-02/03/04/06) y que no puede resolver la propia
+(RF-GP-07).
+
+**Propuesta futura (no implementada):** un seeder idempotente que, al iniciar
+la API, cree dos cuentas de administrador solo si sus correos no existen:
+`Activo = true`, contraseña con `IPasswordHasher`, correos y contraseña por
+variables de entorno (`Seed__Administradores__0__Correo`,
+`Seed__Administradores__1__Correo`, `Seed__Password`) y sin duplicar cuentas
+al reiniciar. No forma parte del código actual ni de los requisitos oficiales;
+se registrará como decisión solo si se implementa.
 
 ## 6. Endpoints
 
@@ -171,7 +179,7 @@ respuestas controladas (RD-07, RD-08).
 |---|---|
 | Core (`Core/Permissions/`) | `Permiso.cs`, `EstadoSolicitudPermiso.cs`, `SolicitudPermiso.cs`, `PermisoOtorgado.cs`, `TransicionesSolicitudPermiso.cs`, `ISolicitudPermisoRepository.cs`, `IPermisoOtorgadoRepository.cs` |
 | Business (`Business/GestionPermisos/`) | `CrearSolicitudPermisoService.cs` + resultado, `ListadoSolicitudesService.cs`, `TransicionSolicitudPermisoService.cs` + resultado, `ResolucionSolicitudService.cs` + resultado, `AutorizacionPermisosService.cs` |
-| Infrastructure | `SolicitudPermisoRepository.cs`, `PermisoOtorgadoRepository.cs`, `DbSet` en `AppDbContext`, migración `AddSolicitudesPermisos`, seeder de administradores |
+| Infrastructure | `SolicitudPermisoRepository.cs`, `PermisoOtorgadoRepository.cs`, `DbSet` en `AppDbContext`, migración `AddSolicitudesPermisos` |
 | API | `SolicitudesPermisosController.cs`, `Models/CrearSolicitudPermisoRequest.cs`, `Models/RechazarSolicitudPermisoRequest.cs`, registros de DI en `Program.cs` |
 | Tests | `Fakes/FakeSolicitudPermisoRepository.cs`, `Fakes/FakePermisoOtorgadoRepository.cs`, carpeta `GestionPermisos/` y `API/SolicitudesPermisosTests.cs` |
 
@@ -200,6 +208,7 @@ respuestas controladas (RD-07, RD-08).
 - **Pendiente de confirmación:** si se desea persistir también el estado
   intermedio `Aprobada` (dos guardados con transacción) además del enfoque
   actual de un solo guardado con estado final `Aplicada`.
-- El seeder (D-GP-08) es un componente nuevo justificado por la verificación
-  de RF-GP-07 y RF-GP-02/03/04/06 (RD-12); no forma parte de los requisitos
-  oficiales de la pieza.
+- La propuesta de seeder de dos administradores (mencionada en D-GP-08 y §5)
+  es una **propuesta futura**, no un componente implementado: no forma parte
+  del código actual ni de los requisitos oficiales de la pieza. La obtención
+  del primer Administrador se realiza con el procedimiento de §5.

@@ -171,29 +171,51 @@ $std = "Bearer $($respuesta.token)"
 
 ### 2. Sesión de Administrador
 
-El registro (`POST /api/usuarios`) siempre crea un Estándar y **no existe
-seed ni endpoint para el primer Administrador**. Para una base recién
-migrada, registrar y activar la cuenta igual que en el paso anterior y
-promoverla en la base:
+El registro (`POST /api/usuarios`) siempre crea un Estándar inactivo y **no
+existe seed ni endpoint para el primer Administrador**. Para una base recién
+migrada, registrar y activar la cuenta del administrador igual que en el paso
+anterior:
 
 ```powershell
-sqlcmd -S "(localdb)\MSSQLLocalDB" -d SistemaDeReservas `
-  -Q "UPDATE Usuarios SET Rol = 0 WHERE Correo = 'admin@itla.edu.do'"
+curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
+  -d '{"nombre":"Admin Demo","correo":"admin@itla.edu.do","contraseña":"Secreta123!"}'
+
+$eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9]+)').Groups[1].Value
+curl.exe -s "$base/activar?token=$activacion"
 ```
 
-`Rol = 0` corresponde a `Administrador`. Después, iniciar sesión con esa
-cuenta y guardar su token en `$adm`:
+Promover **exclusivamente esa cuenta** con un `UPDATE` por su correo único
+(`IX_Usuarios_Correo`) y comprobar que exactamente una fila cambió. `sqlcmd
+-b` devuelve código de error si la comprobación falla:
+
+```powershell
+$sql = "SET NOCOUNT OFF; UPDATE Usuarios SET Rol = 0 WHERE Correo = N'admin@itla.edu.do'; IF @@ROWCOUNT <> 1 THROW 50001, 'Se esperaba promover exactamente una cuenta.', 1;"
+sqlcmd -S "(localdb)\MSSQLLocalDB" -d SistemaDeReservas -b -Q $sql
+if ($LASTEXITCODE -ne 0) { throw "La promoción no afectó exactamente una cuenta." }
+```
+
+`Rol = 0` corresponde a `Administrador`. No debe ejecutarse nunca un `UPDATE`
+sin `WHERE`: la condición limita el cambio a esa cuenta y la comprobación de
+`@@ROWCOUNT` confirma que fue exactamente una.
+
+Después, iniciar una **sesión nueva** con esa cuenta, guardar su token en
+`$adm` y comprobar el rol:
 
 ```powershell
 $respuesta = curl.exe -s -X POST "$base/api/sesiones" `
   -H "Content-Type: application/json" `
   -d '{"correo":"admin@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
 $adm = "Bearer $($respuesta.token)"
+
+curl.exe -s "$base/api/usuarios/yo" -H "Authorization: $adm"
+# 200: {"id":"...","nombre":"Admin Demo","correo":"admin@itla.edu.do","rol":"Administrador"}
 ```
 
-`docs/gestion-permisos.md` §5 describe un seeder idempotente como decisión,
-pero el código actual **no lo implementa**; por eso el primer Administrador
-se crea con el `UPDATE` anterior.
+`docs/gestion-permisos.md` §5 registra este procedimiento. El seeder
+idempotente de dos administradores sigue siendo una **propuesta futura**: el
+código actual no lo implementa.
 
 ### 3. Solicitar y aprobar el permiso
 
