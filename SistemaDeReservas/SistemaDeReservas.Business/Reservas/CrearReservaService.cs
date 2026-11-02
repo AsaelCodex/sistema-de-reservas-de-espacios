@@ -36,14 +36,6 @@ public class CrearReservaService
             return ResultadoCreacionReserva.ActorInvalido();
         }
 
-        // RF-NEG-06: se consulta el servicio real de autorización. El rol
-        // Administrador conserva el comportamiento implícito del catálogo.
-        if (!await _autorizacion.PuedeAsync(
-                actor.UsuarioId, Permiso.CrearReserva, cancellationToken))
-        {
-            return ResultadoCreacionReserva.PermisoDenegado();
-        }
-
         var error = Validar(espacio, fecha, horaInicio, horaFin);
         if (error is not null)
         {
