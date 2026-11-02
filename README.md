@@ -510,6 +510,33 @@ La entrega será `practica-2` (base correcta) más
    modificar la implementación; se acepta porque las corridas
    satisfactorias posteriores con el mismo código dieron 303/303.
 
+## Defectos — Práctica 3
+
+Esta sección documenta los cuatro defectos controlados de la Práctica 3. Cada
+etiqueta `practica-3-defecto-N` parte directamente del commit de
+`practica-3`; no se encadenan ni se mezclan entre sí. La base debe permanecer
+en verde y cada mutante debe compilar y producir al menos un fallo funcional
+atribuible al cambio introducido.
+
+| Etiqueta | Cambio intencional de producción | Prueba que lo detecta | Comportamiento que comprueba |
+|---|---|---|---|
+| `practica-3-defecto-1` | En `SistemaDeReservas.Core/Reservations/TransicionesReserva.cs` se agrega `Solicitada → Finalizada` a la tabla `Permitidas` con condición `Administrador`. | `TransicionReservaServiceTests.Transicionar_WithProhibitedCombination_IsRejectedAndKeepsState(origen: Solicitada, destino: Finalizada)` y `ReservasControllerTests.Transitions_OutsideTable_ReturnConflictAndKeepState(operacion: "PutFinalizar", estado: Solicitada)`. | Una transición fuera de la tabla se rechaza (`TransicionProhibida` / 409) y conserva el estado. El defecto la permite y actualiza la reserva. |
+| `practica-3-defecto-2` | En `SistemaDeReservas.Core/Reservations/TransicionesReserva.cs` se agrega `Finalizada → Cancelada` a la tabla `Permitidas` con condición `Administrador`, creando una salida desde un estado terminal. | `TransicionReservaServiceTests.TerminalStates_HaveNoOutgoingTransitions`, `TransicionReservaServiceTests.Transicionar_FromTerminalState_IsRejectedAndKeepsState(origen: Finalizada, destino: Cancelada)` y `TransicionReservaServiceTests.Transicionar_WithProhibitedCombination_IsRejectedAndKeepsState(origen: Finalizada, destino: Cancelada)`. | `Finalizada` es terminal y no tiene transiciones de salida. El defecto permite salir de ella y cambia el estado. |
+| `practica-3-defecto-3` | En `SistemaDeReservas.Core/Reservations/TransicionesReserva.cs`, dentro de `Evaluar`, se ignora la condición de `Solicitada → Confirmada` (se fuerza `cumple = true` para esa combinación), conservando la validación del actor y las condiciones de las demás transiciones. | `TransicionReservaServiceTests.Transicionar_AsStandardUser_CannotConfirmRejectOrFinish(origen: Solicitada, destino: Confirmada)`. | La primera transición condicionada exige Administrador: un Estándar recibe `CondicionIncumplida` y el estado no cambia. El defecto permite confirmar a un Estándar. |
+| `practica-3-defecto-4` | En `SistemaDeReservas.Business/Reservas/CrearReservaService.cs` se elimina la consulta y comprobación de `AutorizacionPermisosService.PuedeAsync(..., Permiso.CrearReserva)`. | `CrearReservaServiceTests.Crear_WithoutPermission_IsRejectedWithoutWrite`, `ReservasControllerTests.Post_WithoutPermission_ReturnsForbiddenWithoutInsert` y la prueba de integración real `FlujoPermisosReservasTests.SinPermiso_SolicitudPendiente_Aprobacion_PermiteCrearReserva` (se ejecuta sin LocalDB); también falla `FlujoPermisosReservasPersistenciaTests.SinPermiso_SolicitudPendiente_Aprobacion_PermiteCrearReserva`. | Sin permiso concedido, la creación se rechaza (`PermisoDenegado` / 403) y no inserta nada; tras la aprobación, el mismo flujo crea la reserva en `Solicitada`. El defecto permite crear sin permiso. |
+
+### Comando de verificación
+
+```bash
+dotnet test SistemaDeReservas/SistemaDeReservas.sln
+```
+
+La etiqueta `practica-3` debe pasar la suite completa. Cada etiqueta
+`practica-3-defecto-N` debe compilar y producir al menos un fallo funcional
+por el comportamiento alterado. Un error de compilación, un timeout de
+LocalDB o un fallo de adquisición de bloqueo no cuentan como detección del
+defecto.
+
 ## Documentación
 
 - `docs/requerimientos-core.md`: requisitos oficiales del Core con sus
