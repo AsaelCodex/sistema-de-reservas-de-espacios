@@ -44,7 +44,9 @@ public static class TransicionesReserva
         [(EstadoReserva.Confirmada, EstadoReserva.Finalizada)] =
             CondicionTransicionReserva.Administrador,
         [(EstadoReserva.Confirmada, EstadoReserva.Cancelada)] =
-            CondicionTransicionReserva.PropietarioOAdministrador
+            CondicionTransicionReserva.PropietarioOAdministrador,
+        [(EstadoReserva.Finalizada, EstadoReserva.Cancelada)] =
+            CondicionTransicionReserva.Administrador
     };
 
     /// <summary>
