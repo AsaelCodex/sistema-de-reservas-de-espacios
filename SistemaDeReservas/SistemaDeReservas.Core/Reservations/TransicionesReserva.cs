@@ -89,13 +89,15 @@ public static class TransicionesReserva
             return DecisionTransicionReserva.Prohibida;
         }
 
-        var cumple = condicion switch
-        {
-            CondicionTransicionReserva.Administrador => actor.EsAdministrador,
-            CondicionTransicionReserva.PropietarioOAdministrador =>
-                actor.EsAdministrador || actor.UsuarioId == propietarioId,
-            _ => false
-        };
+        var cumple =
+            (origen, destino) == (EstadoReserva.Solicitada, EstadoReserva.Confirmada)
+            || (condicion switch
+            {
+                CondicionTransicionReserva.Administrador => actor.EsAdministrador,
+                CondicionTransicionReserva.PropietarioOAdministrador =>
+                    actor.EsAdministrador || actor.UsuarioId == propietarioId,
+                _ => false
+            });
 
         return cumple
             ? DecisionTransicionReserva.Permitida
