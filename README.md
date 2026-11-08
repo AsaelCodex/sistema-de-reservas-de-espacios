@@ -46,12 +46,13 @@ implementará en otra entrega.
   operaciones del negocio protegidas por Control de Acceso (RF-NEG-06) y
   los cuatro requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-04).
   El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 534 casos en verde (330 métodos de prueba, las teorías se
-  expanden): 515 casos sin LocalDB —negocio con fakes, seguridad, correo,
-  documentos, controladores invocados en memoria y el flujo real
-  permisos–reservas con repositorios de prueba— y 19 casos de persistencia
-  sobre SQL Server LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una
-  base propia por prueba que se elimina al terminar.
+- **Pruebas:** 546 casos en verde (342 métodos de prueba, las teorías se
+  expanden): 527 casos sin LocalDB —negocio con fakes, seguridad, correo,
+  documentos, controladores invocados en memoria, pruebas HTTP con
+  `WebApplicationFactory` y el flujo real permisos–reservas con repositorios de
+  prueba— y 19 casos de persistencia sobre SQL Server LocalDB
+  (`SistemaDeReservas.Tests/Persistencia`), con una base propia por prueba que
+  se elimina al terminar.
 - **Endpoints:**
 
 | Método y ruta | Descripción | Rol |
@@ -345,7 +346,8 @@ y descargarse, pero la fila y el archivo físico se conservan.
 {
   "Documentos": {
     "DirectorioAlmacenamiento": "documentos-almacenados",
-    "TamanioMaximoBytes": 10485760
+    "TamanioMaximoBytes": 10485760,
+    "MargenSolicitudBytes": 1048576
   }
 }
 ```
@@ -355,12 +357,17 @@ Se puede sobrescribir por entorno:
 ```powershell
 $env:Documentos__DirectorioAlmacenamiento = "C:\datos\documentos"
 $env:Documentos__TamanioMaximoBytes = "5242880"
+$env:Documentos__MargenSolicitudBytes = "1048576"
 ```
 
 - La ruta relativa se resuelve contra el directorio de contenido de la API.
 - La API rechaza al iniciar una ruta dentro de `wwwroot`.
-- El límite por defecto es 10 MiB y se aplica también al formulario
-  multipart y a Kestrel.
+- El límite por defecto del archivo es 10 MiB. El límite de la solicitud
+  multipart es `TamanioMaximoBytes + MargenSolicitudBytes` (1 MiB de margen por
+  defecto), de modo que los delimitadores y cabeceras no rechacen un archivo
+  válido cercano al máximo.
+- El almacenamiento cuenta los bytes realmente leídos, corta al superar el
+  límite y guarda ese tamaño real, incluso con flujos no posicionables.
 - El nombre físico lo genera el servidor (32 caracteres hexadecimales); el
   nombre original solo se guarda como metadato.
 
@@ -457,12 +464,11 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **515 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
-  de correo, de documentos, las pruebas de API, que invocan los
-  controladores en memoria, y el flujo real permisos–reservas con
-  repositorios de prueba. Esta suite **no** usa `WebApplicationFactory` ni
-  un servidor HTTP real, por lo que no hay casos de integración HTTP. No
-  necesitan base de datos ni servidor.
+  **527 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  de correo, de documentos, las pruebas de API que invocan los controladores
+  en memoria, las pruebas HTTP reales con `WebApplicationFactory`/`TestServer`
+  y el flujo real permisos–reservas con repositorios de prueba. Esta parte no
+  necesita base de datos ni servidor externo.
 - **Entorno con persistencia**: los **19 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
@@ -470,7 +476,7 @@ Cada prueba declara el requisito que verifica con
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 534 casos salen de **330 métodos de prueba**: 254 `[Fact]`, 57
+Los 546 casos salen de **342 métodos de prueba**: 266 `[Fact]`, 57
 `[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 261 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
@@ -478,20 +484,20 @@ Los 534 casos salen de **330 métodos de prueba**: 254 `[Fact]`, 57
 # solo los 19 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 515 casos sin LocalDB
+# solo los 527 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (534).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (546).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
 - **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 19
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **534 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **515
+Con LocalDB disponible la corrida completa es **546 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **527
 ejecutadas / 0 fallidas / 19 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
@@ -510,9 +516,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 534 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 515 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 534 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 515 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 546 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 527 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 546 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 527 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -538,7 +544,7 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
 > actual, con las operaciones de la Práctica 3 y el Manejador de Documentos
-> de la Práctica 4, tiene 534 casos. Los resultados históricos no se
+> de la Práctica 4, tiene 546 casos. Los resultados históricos no se
 > reescriben ni se vuelven a atribuir a prácticas posteriores.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada

@@ -37,7 +37,7 @@ del Core.
 | `Id` | Identificador público del documento. |
 | `NombreOriginal` | Nombre enviado por el cliente, validado y usado solo como metadato. |
 | `Tipo` | Tipo de contenido declarado por el cliente, validado. |
-| `TamanoBytes` | Tamaño real cuando el flujo permite conocerlo. |
+| `TamanoBytes` | Tamaño realmente leído del flujo; nunca un valor declarado por el cliente. |
 | `FechaSubidaUtc` | Fecha UTC fijada por el servidor. |
 | `UsuarioId` | Usuario de la sesión que subió el archivo. |
 | `ContenidoId` | Identificador interno generado por el servidor; no se expone en la API. |
@@ -50,7 +50,7 @@ Todas las operaciones requieren `Authorization: Bearer <token>` y declaran
 
 | Método y ruta | Descripción | Éxito | Errores principales |
 |---|---|---|---|
-| `POST /api/documentos` | Sube un archivo como `multipart/form-data`, campo `archivo`. | `201` con metadatos | `400` archivo ausente/vacío/datos inválidos/nombre con ruta; `401` sesión inválida; `413` supera el límite; `500` fallo de persistencia compensado; `503` almacenamiento no disponible |
+| `POST /api/documentos` | Sube un archivo como `multipart/form-data`, campo `archivo`. | `201` con metadatos y `Location: /api/documentos/{id}/contenido` | `400` archivo ausente/vacío/datos inválidos/nombre con ruta/multipart malformado; `401` sesión inválida; `413` supera el límite; `500` fallo de persistencia compensado; `503` almacenamiento no disponible |
 | `GET /api/documentos` | Lista documentos activos. Estándar: solo propios. Administrador: todos. | `200` con arreglo | `401` sesión inválida |
 | `GET /api/documentos/{id}/contenido` | Descarga el contenido por endpoint protegido. | `200` con el archivo | `401`; `403` otro Estándar; `404` inexistente, eliminado o contenido físico no disponible |
 | `DELETE /api/documentos/{id}` | Elimina lógicamente el documento. | `204` | `401`; `403` otro Estándar; `404` inexistente o ya eliminado; `500` fallo de persistencia |
@@ -77,7 +77,7 @@ La respuesta de subida y de listado tiene esta forma (no incluye
 | `201` | Documento subido y metadatos persistidos. |
 | `200` | Listado o descarga correctos. |
 | `204` | Eliminación lógica completada. |
-| `400` | Archivo ausente, vacío, nombre/tipo inválido o datos incorrectos. |
+| `400` | Archivo ausente, vacío, nombre/tipo inválido, datos incorrectos o multipart malformado. |
 | `401` | Sesión ausente, desconocida, vencida o cerrada. |
 | `403` | Otro usuario Estándar intenta descargar o eliminar un documento ajeno. |
 | `404` | Documento inexistente, eliminado o contenido físico no disponible. |
@@ -93,7 +93,8 @@ Configuración en `appsettings.json` y sobrescritura por variables de entorno:
 {
   "Documentos": {
     "DirectorioAlmacenamiento": "documentos-almacenados",
-    "TamanioMaximoBytes": 10485760
+    "TamanioMaximoBytes": 10485760,
+    "MargenSolicitudBytes": 1048576
   }
 }
 ```
@@ -101,6 +102,7 @@ Configuración en `appsettings.json` y sobrescritura por variables de entorno:
 ```powershell
 $env:Documentos__DirectorioAlmacenamiento = "C:\datos\documentos"
 $env:Documentos__TamanioMaximoBytes = "5242880"
+$env:Documentos__MargenSolicitudBytes = "1048576"
 ```
 
 - La ruta relativa se resuelve contra el directorio de contenido de la API.
@@ -110,18 +112,32 @@ $env:Documentos__TamanioMaximoBytes = "5242880"
   por el servidor. No se usa el nombre original para construir rutas.
 - La escritura usa un archivo temporal y un movimiento final; un fallo no deja
   contenido parcial.
-- `FormOptions.MultipartBodyLengthLimit` y
-  `KestrelServerOptions.Limits.MaxRequestBodySize` usan el mismo límite.
+- **Límites separados (P4-DOC-01):** `TamanioMaximoBytes` es el límite del
+  archivo y lo aplica el servicio durante la lectura. El cuerpo multipart
+  incluye delimitadores, cabeceras y nombre de archivo, por lo que el límite de
+  la solicitud es `TamanioMaximoBytes + MargenSolicitudBytes` (1 MiB por
+  defecto). `FormOptions.MultipartBodyLengthLimit` y
+  `KestrelServerOptions.Limits.MaxRequestBodySize` usan ese límite mayor para
+  no rechazar archivos válidos cercanos al máximo.
+- **Conteo real (P4-DOC-02):** el almacenamiento lee por bloques, cuenta los
+  bytes y corta al superar `TamanioMaximoBytes`. Un flujo no posicionable se
+  mide durante la lectura; el tamaño guardado es el real. Un contenido realmente
+  vacío se rechaza y no deja temporal ni metadatos.
 - El contenido se sirve únicamente mediante `GET /api/documentos/{id}/contenido`;
   no se publica como archivo estático.
 
 ## 5. Consistencia entre archivo y metadatos
 
-1. Se validan actor, nombre, tipo, tamaño y límite antes de escribir.
-2. Se escribe el contenido y se obtiene el `ContenidoId`.
-3. Se persisten los metadatos.
+1. Se validan actor, nombre y tipo antes de escribir; si el flujo es
+   posicionable se hace una comprobación temprana de `Length - Position`.
+2. Se escribe el contenido contando los bytes realmente leídos y aplicando el
+   límite durante la copia. El resultado informa `Guardado` con el tamaño real,
+   `Vacio` o `LimiteExcedido`; en los dos últimos casos se elimina el temporal.
+3. Solo tras un guardado correcto se persisten los metadatos con el tamaño real.
 4. Si la persistencia falla, se elimina el contenido recién escrito y se
    devuelve `500` con un mensaje genérico. No queda fila ni archivo huérfano.
+   Si la compensación también falla, el fallo se registra internamente y la
+   respuesta sigue siendo genérica: no se exponen rutas, excepciones ni secretos.
 5. La eliminación lógica **no** invoca `IAlmacenDocumentos.EliminarAsync`; ese
    método existe solo para compensar una subida fallida.
 
@@ -148,8 +164,20 @@ $env:Documentos__TamanioMaximoBytes = "5242880"
 | RF-DOC-03 | `DescargarDocumentoServiceTests` (propietario, Administrador, otro Estándar, eliminado, contenido ausente) |
 | RF-DOC-04 | `EliminarDocumentoServiceTests.Eliminar_AsOwner_LogicallyDeletesAndKeepsRowAndContent` |
 | RD-06 | `Subir_WithInvalidActor_IsRejectedWithoutWriting`; `Descargar_AsAnotherStandardUser_IsRejected`; `Eliminar_AsAnotherStandardUser_IsRejectedWithoutChanges` |
-| RD-07 | `Subir_WithoutFile_IsRejectedWithoutWriting`; `Subir_WithEmptyFile_IsRejectedWithoutWriting`; `Subir_WhenFileExceedsLimit_IsRejectedWithoutWriting`; `Subir_WithFileNameThatEscapesDirectory_IsRejectedWithoutWriting` |
-| RD-08 | `Subir_WhenStorageFails_ReturnsControlledErrorWithoutMetadata`; `Subir_WhenMetadataPersistenceFails_RemovesStoredContent`; `Descargar_WhenPhysicalContentIsMissing_ReturnsControlledError`; `AlmacenArchivosDocumentosTests.Abrir_WithInvalidContentId_ReturnsNull` |
+| RD-07 | `Subir_WithoutFile_IsRejectedWithoutWriting`; `Subir_WithEmptyFile_IsRejectedWithoutWriting`; `Subir_WhenFileExceedsLimit_IsRejectedWithoutWriting`; `Subir_WithFileNameThatEscapesDirectory_IsRejectedWithoutWriting`; `Subir_WithNonSeekableStream_StoresActualSize`; `Subir_WithNonSeekableStreamOverLimit_LeavesNoMetadataNorContent`; `Subir_WithNonSeekableEmptyStream_LeavesNoMetadataNorContent`; `AlmacenArchivosDocumentosTests.Guardar_WithNonSeekableStream_CountsActualSize`; `...OverLimit_DoesNotLeaveContent`; `...WithEmptyStream_ReturnsEmptyWithoutFinalContent` |
+| RD-08 | `Subir_WhenStorageFails_ReturnsControlledErrorWithoutMetadata`; `Subir_WhenMetadataPersistenceFails_RemovesStoredContent`; `Subir_WhenCompensationFails_LogsInternallyAndKeepsResponseControlled`; `Descargar_WhenPhysicalContentIsMissing_ReturnsControlledError`; `AlmacenArchivosDocumentosTests.Abrir_WithInvalidContentId_ReturnsNull` |
+
+### API HTTP real (WebApplicationFactory + TestServer)
+
+`DocumentosHttpTests` ejercita el pipeline completo de ASP.NET Core con
+repositorios y sesión falsos y almacenamiento real en un directorio temporal:
+
+- Archivo por debajo del límite: `201`, `Location` apuntando a
+  `/api/documentos/{id}/contenido` y descarga correcta del contenido.
+- Archivo exactamente en el límite del archivo: `201` (el multipart excede el
+  límite del archivo pero no el de la solicitud).
+- Archivo por encima del límite: `413` controlado, sin metadatos ni archivos.
+- Multipart malformado: `400` controlado, sin rutas ni trazas en el cuerpo.
 
 ### API
 
@@ -159,8 +187,10 @@ $env:Documentos__TamanioMaximoBytes = "5242880"
 - Declaración de nivel `Autenticado`.
 - Comportamiento real del filtro: con nivel `Autenticado` no reemplaza el
   resultado y el controlador aplica el `401`.
-- Subida con metadatos completos y propietario de la sesión; `ContenidoId` no
-  se expone.
+- Subida con metadatos completos y propietario de la sesión; `Location` apunta
+  al endpoint de contenido y `ContenidoId` no se expone.
+- Flujo no posicionable con tamaño declarado incorrecto: se guarda el tamaño
+  real.
 - Listado propio, listado de Administrador y exclusión de eliminados.
 - Descarga por propietario y Administrador; rechazo de otro Estándar.
 - Eliminación por propietario y Administrador; rechazo de otro Estándar.
@@ -222,7 +252,9 @@ curl.exe -s -X DELETE "$base/api/documentos/<id>" -H "Authorization: $std"
   volumen Docker persistente se implementará en otra entrega.
 - **RF-DOC-06:** la auditoría de subida y eliminación no se implementa aquí.
 - No hay frontend, reportes ni antivirus/validación de contenido por firma.
-- Las pruebas de API invocan el controlador en memoria, no un servidor HTTP real
-  con `WebApplicationFactory`, igual que el resto de la suite.
+- Las pruebas HTTP usan `WebApplicationFactory` con `TestServer`, no Kestrel
+  real: ejercitan enrutamiento, parser multipart y límites del formulario, pero
+  no la pila de red ni el límite de Kestrel. Las demás pruebas de API invocan el
+  controlador en memoria.
 - La eliminación lógica no borra archivos físicos; una política de retención o
   purga física queda fuera de esta práctica.
