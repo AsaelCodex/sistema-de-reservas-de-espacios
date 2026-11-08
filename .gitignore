@@ -64,3 +64,6 @@ secrets.json
 *.db
 *.sqlite
 *.sqlite3
+
+# Contenido de documentos (RF-DOC-05: volumen persistente, nunca en wwwroot)
+documentos-almacenados/

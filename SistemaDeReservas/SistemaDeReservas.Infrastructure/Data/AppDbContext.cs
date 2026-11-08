@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using SistemaDeReservas.Core.Documents;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
@@ -18,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<Reserva> Reservas { get; set; }
     public DbSet<SolicitudPermiso> SolicitudesPermiso { get; set; }
     public DbSet<PermisoOtorgado> PermisosOtorgados { get; set; }
+    public DbSet<Documento> Documentos { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +68,21 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
             otorgado.HasIndex(o => new { o.UsuarioId, o.Permiso })
                 .IsUnique();
+        });
+        modelBuilder.Entity<Documento>(documento =>
+        {
+            documento.Property(d => d.NombreOriginal)
+                .HasMaxLength(Documento.LongitudMaximaNombreOriginal);
+            documento.Property(d => d.Tipo)
+                .HasMaxLength(Documento.LongitudMaximaTipo);
+            documento.Property(d => d.ContenidoId)
+                .HasMaxLength(Documento.LongitudMaximaContenidoId);
+            documento.HasIndex(d => d.ContenidoId)
+                .IsUnique();
+            documento.HasIndex(d => new { d.UsuarioId, d.Eliminado });
+            documento.HasOne(d => d.Usuario)
+                .WithMany()
+                .HasForeignKey(d => d.UsuarioId);
         });
     }
 }

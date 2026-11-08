@@ -22,6 +22,52 @@ namespace SistemaDeReservas.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("SistemaDeReservas.Core.Documents.Documento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContenidoId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<bool>("Eliminado")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("EliminadoEnUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("FechaSubidaUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("NombreOriginal")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<long>("TamanoBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContenidoId")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId", "Eliminado");
+
+                    b.ToTable("Documentos");
+                });
+
             modelBuilder.Entity("SistemaDeReservas.Core.Notifications.CorreoEnCola", b =>
                 {
                     b.Property<Guid>("Id")
@@ -292,6 +338,17 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("SistemaDeReservas.Core.Documents.Documento", b =>
+                {
+                    b.HasOne("SistemaDeReservas.Core.Users.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("SistemaDeReservas.Core.Permissions.PermisoOtorgado", b =>
