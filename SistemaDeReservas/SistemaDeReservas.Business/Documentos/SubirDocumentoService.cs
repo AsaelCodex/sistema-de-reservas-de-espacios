@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SistemaDeReservas.Core.Documents;
 
 namespace SistemaDeReservas.Business.Documentos;
@@ -18,11 +20,13 @@ public class SubirDocumentoService
     private readonly IDocumentoRepository _documentos;
     private readonly IAlmacenDocumentos _almacen;
     private readonly long _limiteBytes;
+    private readonly ILogger<SubirDocumentoService> _logger;
 
     public SubirDocumentoService(
         IDocumentoRepository documentos,
         IAlmacenDocumentos almacen,
-        long limiteBytes = LimitePredeterminadoBytes)
+        long limiteBytes = LimitePredeterminadoBytes,
+        ILogger<SubirDocumentoService>? logger = null)
     {
         if (limiteBytes <= 0)
         {
@@ -34,13 +38,13 @@ public class SubirDocumentoService
         _documentos = documentos;
         _almacen = almacen;
         _limiteBytes = limiteBytes;
+        _logger = logger ?? NullLogger<SubirDocumentoService>.Instance;
     }
 
     public async Task<ResultadoSubidaDocumento> SubirAsync(
         ActorDocumento? actor,
         string? nombreOriginal,
         string? tipo,
-        long tamanoBytes,
         Stream? contenido,
         CancellationToken cancellationToken = default)
     {
@@ -68,41 +72,60 @@ public class SubirDocumentoService
             return ResultadoSubidaDocumento.DatosInvalidos(errorTipo);
         }
 
-        // RD-07: cuando el flujo permite conocer el tamaño real se usa ese valor,
-        // no el declarado por el cliente.
-        var tamano = contenido.CanSeek ? contenido.Length : tamanoBytes;
-        if (tamano <= 0)
+        // RD-07: solo se usa la longitud del propio flujo cuando es fiable
+        // (CanSeek). Un flujo no posicionable se mide durante la copia y el
+        // tamaño persistido es el realmente leído, nunca uno declarado.
+        if (contenido.CanSeek)
         {
-            return ResultadoSubidaDocumento.DatosInvalidos("El archivo está vacío.");
+            var longitudRestante = contenido.Length - contenido.Position;
+            if (longitudRestante <= 0)
+            {
+                return ResultadoSubidaDocumento.DatosInvalidos("El archivo está vacío.");
+            }
+
+            if (longitudRestante > _limiteBytes)
+            {
+                return ResultadoSubidaDocumento.TamanoExcedido(_limiteBytes);
+            }
         }
 
-        if (tamano > _limiteBytes)
-        {
-            return ResultadoSubidaDocumento.TamanoExcedido(_limiteBytes);
-        }
-
-        string contenidoId;
+        ResultadoGuardadoContenido guardado;
         try
         {
-            contenidoId = await _almacen.GuardarAsync(contenido, cancellationToken);
+            guardado = await _almacen.GuardarAsync(
+                contenido, _limiteBytes, cancellationToken);
         }
-        catch
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception excepcion)
         {
             // RD-08: el detalle del almacenamiento no se expone al usuario.
+            _logger.LogError(
+                excepcion,
+                "No fue posible escribir el contenido físico del documento.");
             return ResultadoSubidaDocumento.AlmacenamientoNoDisponible();
         }
 
-        if (string.IsNullOrWhiteSpace(contenidoId))
+        switch (guardado.Estado)
         {
-            return ResultadoSubidaDocumento.AlmacenamientoNoDisponible();
+            case EstadoGuardadoContenido.Vacio:
+                return ResultadoSubidaDocumento.DatosInvalidos("El archivo está vacío.");
+            case EstadoGuardadoContenido.LimiteExcedido:
+                return ResultadoSubidaDocumento.TamanoExcedido(_limiteBytes);
+            case EstadoGuardadoContenido.Guardado
+                when string.IsNullOrWhiteSpace(guardado.ContenidoId):
+                return ResultadoSubidaDocumento.AlmacenamientoNoDisponible();
         }
 
+        var contenidoId = guardado.ContenidoId!;
         var documento = new Documento
         {
             Id = Guid.NewGuid(),
             NombreOriginal = nombre,
             Tipo = tipoNormalizado,
-            TamanoBytes = tamano,
+            TamanoBytes = guardado.TamanoBytes,
             FechaSubidaUtc = DateTime.UtcNow,
             UsuarioId = actor.UsuarioId,
             ContenidoId = contenidoId,
@@ -114,18 +137,30 @@ public class SubirDocumentoService
         {
             await _documentos.GuardarAsync(documento, cancellationToken);
         }
-        catch
+        catch (Exception excepcion)
         {
             // Consistencia entre almacenamiento y metadatos: si no se pudo
             // registrar la fila, tampoco debe quedar el contenido escrito.
+            _logger.LogError(
+                excepcion,
+                "No fue posible persistir los metadatos del documento; " +
+                "se compensará el contenido {ContenidoId}.",
+                contenidoId);
+
             try
             {
                 await _almacen.EliminarAsync(contenidoId, CancellationToken.None);
             }
-            catch
+            catch (Exception compensacion)
             {
                 // La compensación es de mejor esfuerzo; el error original ya se
-                // tradujo a una respuesta controlada.
+                // tradujo a una respuesta controlada y el fallo se registra solo
+                // de forma interna.
+                _logger.LogError(
+                    compensacion,
+                    "Falló la compensación del contenido {ContenidoId} después " +
+                    "de no poder persistir sus metadatos.",
+                    contenidoId);
             }
 
             return ResultadoSubidaDocumento.ErrorPersistencia();

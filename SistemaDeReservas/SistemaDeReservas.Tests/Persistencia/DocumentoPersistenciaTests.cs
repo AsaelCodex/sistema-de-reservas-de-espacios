@@ -121,7 +121,6 @@ public class DocumentoPersistenciaTests : BasePruebaPersistencia
                     new ActorDocumento(usuario.Id, Rol.Estandar),
                     "acta.txt",
                     "text/plain",
-                    contenido.Length,
                     new MemoryStream(contenido));
 
                 Assert.Equal(EstadoSubidaDocumento.Subido, resultado.Estado);

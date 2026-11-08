@@ -16,10 +16,13 @@ public sealed class FakeAlmacenDocumentos : IAlmacenDocumentos
 
     public bool SimularFalloAlAbrir { get; set; }
 
+    public bool SimularFalloAlEliminar { get; set; }
+
     public int Guardados { get; private set; }
 
-    public Task<string> GuardarAsync(
+    public async Task<ResultadoGuardadoContenido> GuardarAsync(
         Stream contenido,
+        long limiteBytes,
         CancellationToken cancellationToken = default)
     {
         if (SimularFalloAlGuardar)
@@ -28,11 +31,34 @@ public sealed class FakeAlmacenDocumentos : IAlmacenDocumentos
         }
 
         using var copia = new MemoryStream();
-        contenido.CopyTo(copia);
+        var buffer = new byte[81920];
+        long tamanoBytes = 0;
+        while (true)
+        {
+            var leidos = await contenido.ReadAsync(buffer.AsMemory(), cancellationToken);
+            if (leidos == 0)
+            {
+                break;
+            }
+
+            tamanoBytes += leidos;
+            if (tamanoBytes > limiteBytes)
+            {
+                return ResultadoGuardadoContenido.LimiteExcedido();
+            }
+
+            await copia.WriteAsync(buffer.AsMemory(0, leidos), cancellationToken);
+        }
+
+        if (tamanoBytes == 0)
+        {
+            return ResultadoGuardadoContenido.Vacio();
+        }
+
         var contenidoId = Guid.NewGuid().ToString("N").ToUpperInvariant();
         _contenido[contenidoId] = copia.ToArray();
         Guardados++;
-        return Task.FromResult(contenidoId);
+        return ResultadoGuardadoContenido.Guardado(contenidoId, tamanoBytes);
     }
 
     public Task<Stream?> AbrirAsync(
@@ -57,6 +83,11 @@ public sealed class FakeAlmacenDocumentos : IAlmacenDocumentos
         string contenidoId,
         CancellationToken cancellationToken = default)
     {
+        if (SimularFalloAlEliminar)
+        {
+            throw new IOException("Fallo de eliminación simulado.");
+        }
+
         _eliminados.Add(contenidoId);
         _contenido.Remove(contenidoId);
         return Task.CompletedTask;

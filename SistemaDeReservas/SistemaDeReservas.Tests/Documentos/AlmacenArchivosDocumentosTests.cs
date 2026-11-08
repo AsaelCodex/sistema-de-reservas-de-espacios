@@ -1,15 +1,19 @@
 using System.Text;
+using SistemaDeReservas.Core.Documents;
 using SistemaDeReservas.Infrastructure.Storage;
+using SistemaDeReservas.Tests.Fakes;
 
 namespace SistemaDeReservas.Tests.Documentos;
 
 /// <summary>
 /// RF-DOC-01, RF-DOC-03 y RD-08: almacenamiento físico con nombre generado por
-/// el servidor y contención de rutas. El nombre original nunca se usa para
-/// construir la ruta.
+/// el servidor, conteo real del contenido y contención de rutas. El nombre
+/// original nunca se usa para construir la ruta.
 /// </summary>
 public sealed class AlmacenArchivosDocumentosTests : IDisposable
 {
+    private const long LimiteBytes = 1024;
+
     private readonly string _directorio =
         Path.Combine(Path.GetTempPath(), "documentos-tests-" + Guid.NewGuid().ToString("N"));
 
@@ -20,8 +24,12 @@ public sealed class AlmacenArchivosDocumentosTests : IDisposable
         var almacen = new AlmacenArchivosDocumentos(_directorio);
         var bytes = Encoding.UTF8.GetBytes("contenido");
 
-        var contenidoId = await almacen.GuardarAsync(new MemoryStream(bytes));
+        var guardado = await almacen.GuardarAsync(
+            new MemoryStream(bytes), LimiteBytes);
 
+        Assert.Equal(EstadoGuardadoContenido.Guardado, guardado.Estado);
+        Assert.Equal(bytes.Length, guardado.TamanoBytes);
+        var contenidoId = Assert.IsType<string>(guardado.ContenidoId);
         Assert.Equal(32, contenidoId.Length);
         Assert.All(contenidoId, caracter => Assert.True(char.IsAsciiHexDigit(caracter)));
         var archivo = Assert.Single(Directory.GetFiles(_directorio));
@@ -41,11 +49,61 @@ public sealed class AlmacenArchivosDocumentosTests : IDisposable
         var subdirectorio = Path.Combine(_directorio, "contenido");
         var almacen = new AlmacenArchivosDocumentos(subdirectorio);
 
-        var contenidoId = await almacen.GuardarAsync(
-            new MemoryStream(Encoding.UTF8.GetBytes("x")));
+        var guardado = await almacen.GuardarAsync(
+            new MemoryStream(Encoding.UTF8.GetBytes("x")), LimiteBytes);
 
+        Assert.Equal(EstadoGuardadoContenido.Guardado, guardado.Estado);
+        var contenidoId = Assert.IsType<string>(guardado.ContenidoId);
         Assert.True(File.Exists(Path.Combine(subdirectorio, contenidoId)));
         Assert.Single(Directory.GetFiles(subdirectorio));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-DOC-01")]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Guardar_WithNonSeekableStream_CountsActualSize()
+    {
+        var almacen = new AlmacenArchivosDocumentos(_directorio);
+        var bytes = Encoding.UTF8.GetBytes("contenido real");
+        var flujo = new StreamNoPosicionable(new MemoryStream(bytes));
+
+        var guardado = await almacen.GuardarAsync(flujo, LimiteBytes);
+
+        Assert.Equal(EstadoGuardadoContenido.Guardado, guardado.Estado);
+        Assert.Equal(bytes.Length, guardado.TamanoBytes);
+        Assert.Equal(bytes.Length, flujo.BytesLeidos);
+        Assert.Single(Directory.GetFiles(_directorio));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-DOC-01")]
+    [Trait("Requerimiento", "RD-07")]
+    [Trait("Requerimiento", "RD-08")]
+    public async Task Guardar_WithNonSeekableStreamOverLimit_DoesNotLeaveContent()
+    {
+        var almacen = new AlmacenArchivosDocumentos(_directorio);
+        var flujo = new StreamNoPosicionable(new MemoryStream(new byte[LimiteBytes + 1]));
+
+        var guardado = await almacen.GuardarAsync(flujo, LimiteBytes);
+
+        Assert.Equal(EstadoGuardadoContenido.LimiteExcedido, guardado.Estado);
+        Assert.Null(guardado.ContenidoId);
+        Assert.Empty(Directory.GetFiles(_directorio));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-DOC-01")]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Guardar_WithEmptyStream_ReturnsEmptyWithoutFinalContent()
+    {
+        var almacen = new AlmacenArchivosDocumentos(_directorio);
+
+        var guardado = await almacen.GuardarAsync(
+            new StreamNoPosicionable(new MemoryStream()), LimiteBytes);
+
+        Assert.Equal(EstadoGuardadoContenido.Vacio, guardado.Estado);
+        Assert.Null(guardado.ContenidoId);
+        Assert.Empty(Directory.GetFiles(_directorio));
     }
 
     [Fact]
@@ -81,8 +139,9 @@ public sealed class AlmacenArchivosDocumentosTests : IDisposable
     public async Task Eliminar_RemovesOnlyTheStoredContent()
     {
         var almacen = new AlmacenArchivosDocumentos(_directorio);
-        var contenidoId = await almacen.GuardarAsync(
-            new MemoryStream(Encoding.UTF8.GetBytes("x")));
+        var guardado = await almacen.GuardarAsync(
+            new MemoryStream(Encoding.UTF8.GetBytes("x")), LimiteBytes);
+        var contenidoId = Assert.IsType<string>(guardado.ContenidoId);
 
         await almacen.EliminarAsync(contenidoId);
 

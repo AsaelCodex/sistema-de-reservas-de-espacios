@@ -9,10 +9,16 @@ namespace SistemaDeReservas.Core.Documents;
 public interface IAlmacenDocumentos
 {
     /// <summary>
-    /// Guarda el contenido y devuelve el identificador interno generado por el
-    /// servidor. Lanza una excepción si no puede completar la escritura.
+    /// Guarda el contenido, cuenta los bytes realmente leídos y aplica
+    /// <paramref name="limiteBytes"/> durante la copia. Devuelve el
+    /// identificador interno generado por el servidor y el tamaño real. No deja
+    /// archivo final si el contenido está vacío o excede el límite. Lanza una
+    /// excepción si no puede completar la escritura.
     /// </summary>
-    Task<string> GuardarAsync(Stream contenido, CancellationToken cancellationToken = default);
+    Task<ResultadoGuardadoContenido> GuardarAsync(
+        Stream contenido,
+        long limiteBytes,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Abre el contenido para lectura o devuelve <c>null</c> si no existe o no

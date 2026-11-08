@@ -68,7 +68,6 @@ public class DocumentosController : ControllerBase
                 actor,
                 archivo?.FileName,
                 archivo?.ContentType,
-                archivo?.Length ?? 0,
                 contenido,
                 cancellationToken);
 

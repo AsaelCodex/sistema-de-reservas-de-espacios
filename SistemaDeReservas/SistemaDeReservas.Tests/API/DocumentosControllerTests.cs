@@ -155,6 +155,30 @@ public class DocumentosControllerTests
     }
 
     [Fact]
+    [Trait("Requerimiento", "RF-DOC-01")]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task Post_WithNonSeekableFileAndWrongDeclaredLength_StoresActualSize()
+    {
+        var usuario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(usuario);
+        var bytes = Encoding.UTF8.GetBytes("diez bytes");
+        var archivo = new FormFileNoPosicionable(
+            new StreamNoPosicionable(new MemoryStream(bytes)),
+            longitudDeclarada: 1,
+            "archivo",
+            "real.txt",
+            "text/plain");
+
+        var resultado = await _controller.Post(
+            archivo, $"Bearer {token}", CancellationToken.None);
+
+        Assert.IsType<CreatedResult>(resultado);
+        var documento = Assert.Single(_documentos.Documentos);
+        Assert.Equal(bytes.Length, documento.TamanoBytes);
+        Assert.Equal(bytes.Length, _almacen.Contenido[documento.ContenidoId].Length);
+    }
+
+    [Fact]
     [Trait("Requerimiento", "RF-DOC-02")]
     public async Task Get_AsOwner_ReturnsOnlyOwnActiveDocuments()
     {

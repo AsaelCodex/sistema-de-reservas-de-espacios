@@ -28,11 +28,18 @@ public sealed class AlmacenArchivosDocumentos : IAlmacenDocumentos
         _raiz = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directorio));
     }
 
-    public async Task<string> GuardarAsync(
+    public async Task<ResultadoGuardadoContenido> GuardarAsync(
         Stream contenido,
+        long limiteBytes,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contenido);
+        if (limiteBytes <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(limiteBytes),
+                "El límite de contenido debe ser positivo.");
+        }
 
         Directory.CreateDirectory(_raiz);
 
@@ -40,6 +47,9 @@ public sealed class AlmacenArchivosDocumentos : IAlmacenDocumentos
             RandomNumberGenerator.GetBytes(LongitudContenidoId / 2));
         var destino = RutaDe(contenidoId);
         var temporal = RutaDe(contenidoId + ".tmp");
+        var buffer = new byte[81920];
+        long tamanoBytes = 0;
+        var limiteExcedido = false;
 
         try
         {
@@ -51,11 +61,41 @@ public sealed class AlmacenArchivosDocumentos : IAlmacenDocumentos
                 bufferSize: 81920,
                 FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
-                await contenido.CopyToAsync(salida, cancellationToken);
+                while (true)
+                {
+                    var leidos = await contenido.ReadAsync(
+                        buffer.AsMemory(), cancellationToken);
+                    if (leidos == 0)
+                    {
+                        break;
+                    }
+
+                    tamanoBytes += leidos;
+                    if (tamanoBytes > limiteBytes)
+                    {
+                        limiteExcedido = true;
+                        break;
+                    }
+
+                    await salida.WriteAsync(
+                        buffer.AsMemory(0, leidos), cancellationToken);
+                }
+            }
+
+            if (limiteExcedido)
+            {
+                EliminarSilencioso(temporal);
+                return ResultadoGuardadoContenido.LimiteExcedido();
+            }
+
+            if (tamanoBytes == 0)
+            {
+                EliminarSilencioso(temporal);
+                return ResultadoGuardadoContenido.Vacio();
             }
 
             File.Move(temporal, destino);
-            return contenidoId;
+            return ResultadoGuardadoContenido.Guardado(contenidoId, tamanoBytes);
         }
         catch
         {
