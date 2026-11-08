@@ -48,6 +48,24 @@ if (limiteDocumentos <= 0)
         "Documentos:TamanioMaximoBytes must be greater than zero");
 }
 
+// El cuerpo multipart incluye límites, cabeceras y nombre del archivo además
+// del contenido. El límite del archivo lo aplica el servicio; el de la
+// solicitud debe ser mayor para no rechazar archivos válidos cercanos al
+// máximo (P4-DOC-01).
+var margenSolicitudDocumentos =
+    builder.Configuration.GetValue<long?>("Documentos:MargenSolicitudBytes") ??
+    1024 * 1024;
+if (margenSolicitudDocumentos < 0 ||
+    limiteDocumentos > long.MaxValue - margenSolicitudDocumentos)
+{
+    throw new InvalidOperationException(
+        "Documentos:MargenSolicitudBytes must be zero or greater and keep " +
+        "the request limit within range");
+}
+
+var limiteSolicitudDocumentos =
+    limiteDocumentos + margenSolicitudDocumentos;
+
 var directorioDocumentos =
     builder.Configuration["Documentos:DirectorioAlmacenamiento"] ??
     "documentos-almacenados";
@@ -65,9 +83,9 @@ if (EstaDentroDe(rutaDocumentos, rutaWwwRoot))
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.Configure<FormOptions>(options =>
-    options.MultipartBodyLengthLimit = limiteDocumentos);
+    options.MultipartBodyLengthLimit = limiteSolicitudDocumentos);
 builder.WebHost.ConfigureKestrel(options =>
-    options.Limits.MaxRequestBodySize = limiteDocumentos);
+    options.Limits.MaxRequestBodySize = limiteSolicitudDocumentos);
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add(new TypeFilterAttribute(typeof(AutorizacionRolFilter)));
@@ -147,7 +165,8 @@ builder.Services.AddScoped<SubirDocumentoService>(sp =>
     new SubirDocumentoService(
         sp.GetRequiredService<IDocumentoRepository>(),
         sp.GetRequiredService<IAlmacenDocumentos>(),
-        limiteDocumentos));
+        limiteDocumentos,
+        sp.GetRequiredService<ILogger<SubirDocumentoService>>()));
 builder.Services.AddScoped<ListadoDocumentosService>();
 builder.Services.AddScoped<DescargarDocumentoService>();
 builder.Services.AddScoped<EliminarDocumentoService>();
@@ -186,4 +205,9 @@ static bool EstaDentroDe(string ruta, string directorio)
              ".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
          !relativa.StartsWith(
              ".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal));
+}
+
+/// <summary>Punto de entrada expuesto a las pruebas HTTP de integración.</summary>
+public partial class Program
+{
 }
