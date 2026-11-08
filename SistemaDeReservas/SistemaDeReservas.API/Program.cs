@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http.Features;
 using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Workers;
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Business.Documentos;
 using SistemaDeReservas.Business.GestionPermisos;
 using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Business.Reservas;
+using SistemaDeReservas.Core.Documents;
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
@@ -14,6 +17,7 @@ using SistemaDeReservas.Infrastructure.Data;
 using SistemaDeReservas.Infrastructure.Email;
 using SistemaDeReservas.Infrastructure.Repositories;
 using SistemaDeReservas.Infrastructure.Security;
+using SistemaDeReservas.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,9 +36,38 @@ if (string.IsNullOrEmpty(publicBaseUrl))
     throw new InvalidOperationException(
         "App:PublicBaseUrl configuration is not set");
 }
+
+// RF-DOC-01 y RF-DOC-05 (preparación): límite y ruta de almacenamiento
+// explícitos y configurables. El volumen Docker se implementará aparte.
+var limiteDocumentos =
+    builder.Configuration.GetValue<long?>("Documentos:TamanioMaximoBytes") ??
+    SubirDocumentoService.LimitePredeterminadoBytes;
+if (limiteDocumentos <= 0)
+{
+    throw new InvalidOperationException(
+        "Documentos:TamanioMaximoBytes must be greater than zero");
+}
+
+var directorioDocumentos =
+    builder.Configuration["Documentos:DirectorioAlmacenamiento"] ??
+    "documentos-almacenados";
+var rutaDocumentos = Path.GetFullPath(
+    Path.Combine(builder.Environment.ContentRootPath, directorioDocumentos));
+var rutaWwwRoot = Path.GetFullPath(
+    Path.Combine(builder.Environment.ContentRootPath, "wwwroot"));
+if (EstaDentroDe(rutaDocumentos, rutaWwwRoot))
+{
+    throw new InvalidOperationException(
+        "Documentos:DirectorioAlmacenamiento must be outside wwwroot");
+}
+
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
+builder.Services.Configure<FormOptions>(options =>
+    options.MultipartBodyLengthLimit = limiteDocumentos);
+builder.WebHost.ConfigureKestrel(options =>
+    options.Limits.MaxRequestBodySize = limiteDocumentos);
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add(new TypeFilterAttribute(typeof(AutorizacionRolFilter)));
@@ -48,6 +81,9 @@ builder.Services.AddScoped<ICodigoRecuperacionRepository, CodigoRecuperacionRepo
 builder.Services.AddScoped<IReservaRepository, ReservaRepository>();
 builder.Services.AddScoped<ISolicitudPermisoRepository, SolicitudPermisoRepository>();
 builder.Services.AddScoped<IPermisoOtorgadoRepository, PermisoOtorgadoRepository>();
+builder.Services.AddScoped<IDocumentoRepository, DocumentoRepository>();
+builder.Services.AddSingleton<IAlmacenDocumentos>(
+    _ => new AlmacenArchivosDocumentos(rutaDocumentos));
 builder.Services.AddSingleton<IEnvioCorreo>(sp =>
 {
     var smtpHost = builder.Configuration["CorreoSmtp:Host"];
@@ -107,6 +143,14 @@ builder.Services.AddScoped<AutorizacionPermisosService>();
 builder.Services.AddScoped<CrearReservaService>();
 builder.Services.AddScoped<ListadoReservasService>();
 builder.Services.AddScoped<TransicionReservaService>();
+builder.Services.AddScoped<SubirDocumentoService>(sp =>
+    new SubirDocumentoService(
+        sp.GetRequiredService<IDocumentoRepository>(),
+        sp.GetRequiredService<IAlmacenDocumentos>(),
+        limiteDocumentos));
+builder.Services.AddScoped<ListadoDocumentosService>();
+builder.Services.AddScoped<DescargarDocumentoService>();
+builder.Services.AddScoped<EliminarDocumentoService>();
 builder.Services.AddScoped<ProcesadorColaCorreos>();
 builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -127,3 +171,19 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+/// <summary>
+/// Comprueba que <paramref name="ruta"/> esté dentro de
+/// <paramref name="directorio"/> (o sea el mismo directorio).
+/// </summary>
+static bool EstaDentroDe(string ruta, string directorio)
+{
+    var relativa = Path.GetRelativePath(directorio, ruta);
+    return relativa == "." ||
+        (!Path.IsPathRooted(relativa) &&
+         relativa != ".." &&
+         !relativa.StartsWith(
+             ".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
+         !relativa.StartsWith(
+             ".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal));
+}
