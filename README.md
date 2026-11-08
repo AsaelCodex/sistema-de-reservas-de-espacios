@@ -20,7 +20,12 @@ Gestión de Permisos** (RF-GP-01 a RF-GP-07) también está implementada y
 verificada. El **módulo de negocio** expone la creación, las consultas y
 las transiciones de reservas mediante endpoints protegidos: máquina de
 estados (RF-NEG-03 a RF-NEG-05 y RF-NEG-09), creación y consultas
-(RF-NEG-02) y operaciones protegidas por Control de Acceso (RF-NEG-06).
+(RF-NEG-02) y operaciones protegidas por Control de Acceso (RF-NEG-06). La
+**Pieza 3 - Manejador de Documentos** (RF-DOC-01 a RF-DOC-04) está
+implementada y verificada: subida, listado, descarga y eliminación lógica
+con metadatos persistidos y almacenamiento fuera de `wwwroot`. RF-DOC-05
+queda preparado con una ruta configurable; el volumen Docker se
+implementará en otra entrega.
 
 ## Arquitectura
 
@@ -37,15 +42,16 @@ estados (RF-NEG-03 a RF-NEG-05 y RF-NEG-09), creación y consultas
 - **Verificado:** los 22 requisitos de Control de Acceso (RF-CA-01 a
   RF-CA-22), los 7 de Gestión de Permisos (RF-GP-01 a RF-GP-07), la
   máquina de estados del negocio (RF-NEG-03, RF-NEG-04, RF-NEG-05 y
-  RF-NEG-09), la creación y las consultas de reservas (RF-NEG-02) y las
-  operaciones del negocio protegidas por Control de Acceso (RF-NEG-06).
+  RF-NEG-09), la creación y las consultas de reservas (RF-NEG-02), las
+  operaciones del negocio protegidas por Control de Acceso (RF-NEG-06) y
+  los cuatro requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-04).
   El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 454 casos en verde (274 métodos de prueba, las teorías se
-  expanden): 439 casos sin LocalDB —negocio con fakes, seguridad, correo,
-  controladores invocados en memoria y el flujo real permisos–reservas con
-  repositorios de prueba— y 15 casos de persistencia sobre SQL Server
-  LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una base propia por
-  prueba que se elimina al terminar.
+- **Pruebas:** 534 casos en verde (330 métodos de prueba, las teorías se
+  expanden): 515 casos sin LocalDB —negocio con fakes, seguridad, correo,
+  documentos, controladores invocados en memoria y el flujo real
+  permisos–reservas con repositorios de prueba— y 19 casos de persistencia
+  sobre SQL Server LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una
+  base propia por prueba que se elimina al terminar.
 - **Endpoints:**
 
 | Método y ruta | Descripción | Rol |
@@ -76,19 +82,24 @@ estados (RF-NEG-03 a RF-NEG-05 y RF-NEG-09), creación y consultas
 | `PUT /api/reservas/{id}/rechazar` | Rechazar (409 si la transición no procede) | Administrador |
 | `PUT /api/reservas/{id}/cancelar` | Cancelar (propietario o Administrador) | Autenticado |
 | `PUT /api/reservas/{id}/finalizar` | Finalizar (solo desde `Confirmada`) | Administrador |
+| `POST /api/documentos` | Subir un archivo (`multipart/form-data`, campo `archivo`; 413 si supera el límite) | Autenticado |
+| `GET /api/documentos` | Listar documentos activos (propios; todos para Administrador) | Autenticado |
+| `GET /api/documentos/{id}/contenido` | Descargar el contenido (403 si es de otro Estándar) | Autenticado |
+| `DELETE /api/documentos/{id}` | Eliminación lógica (204; 403 si es de otro Estándar) | Autenticado |
 
-- **Pendiente (piezas posteriores):** Manejador de Documentos (RF-DOC),
-  Notificaciones (RF-NOT-01 a RF-NOT-07; la cola de correos RF-NOT-08 a
-  RF-NOT-13 ya está implementada), Reportes (RF-REP), Auditoría (RF-AUD)
-  y el resto del módulo de negocio (RF-NEG-01, RF-NEG-07, RF-NEG-08 y
-  RF-NEG-10).
+- **Pendiente (piezas posteriores):** RF-DOC-05 (volumen Docker
+  persistente; la ruta configurable ya está preparada) y RF-DOC-06
+  (auditoría), Notificaciones (RF-NOT-01 a RF-NOT-07; la cola de correos
+  RF-NOT-08 a RF-NOT-13 ya está implementada), Reportes (RF-REP),
+  Auditoría (RF-AUD) y el resto del módulo de negocio (RF-NEG-01,
+  RF-NEG-07, RF-NEG-08 y RF-NEG-10).
 
 ## Requisitos
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` debe mostrar 10.x)
 - Git
 - SQL Server (LocalDB, Express o superior) para ejecutar la API y para
-  las 15 pruebas de persistencia (si no está disponible, esas pruebas se
+  las 19 pruebas de persistencia (si no está disponible, esas pruebas se
   omiten con el motivo; ver «Pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
@@ -315,6 +326,83 @@ El 503 no se provoca con una petición normal: requiere que `sp_getapplock`
 falle. Está cubierto por la prueba automatizada
 `ReservasControllerTests.Post_WhenLockIsNotAcquired_ReturnsServiceUnavailable`.
 
+## Documentos (práctica 4)
+
+El manejador de documentos permite subir, listar, descargar y eliminar
+lógicamente archivos. Los metadatos se guardan en la tabla `Documentos`
+(migración `AddDocumentos`) y el contenido se escribe fuera de `wwwroot`;
+la descarga solo se sirve por el endpoint protegido, nunca como archivo
+estático.
+
+Todas las operaciones requieren una sesión válida. Un usuario Estándar solo
+gestiona sus propios documentos; un Administrador puede gestionar los de
+otros usuarios. La eliminación es **lógica**: el documento deja de listarse
+y descargarse, pero la fila y el archivo físico se conservan.
+
+### Configuración
+
+```json
+{
+  "Documentos": {
+    "DirectorioAlmacenamiento": "documentos-almacenados",
+    "TamanioMaximoBytes": 10485760
+  }
+}
+```
+
+Se puede sobrescribir por entorno:
+
+```powershell
+$env:Documentos__DirectorioAlmacenamiento = "C:\datos\documentos"
+$env:Documentos__TamanioMaximoBytes = "5242880"
+```
+
+- La ruta relativa se resuelve contra el directorio de contenido de la API.
+- La API rechaza al iniciar una ruta dentro de `wwwroot`.
+- El límite por defecto es 10 MiB y se aplica también al formulario
+  multipart y a Kestrel.
+- El nombre físico lo genera el servidor (32 caracteres hexadecimales); el
+  nombre original solo se guarda como metadato.
+
+### Comprobación manual
+
+Con la API en marcha y una sesión de Estándar en `$std`:
+
+```powershell
+# 201: metadatos del documento (no incluye el identificador interno)
+curl.exe -s -X POST "$base/api/documentos" `
+  -H "Authorization: $std" -F "archivo=@C:\ruta\acta.pdf"
+
+# 200: solo los documentos activos del usuario de la sesión
+curl.exe -s "$base/api/documentos" -H "Authorization: $std"
+
+# 200: descarga por el identificador del documento
+curl.exe -s "$base/api/documentos/<id>/contenido" `
+  -H "Authorization: $std" -o acta.pdf
+
+# 204: eliminación lógica
+curl.exe -s -X DELETE "$base/api/documentos/<id>" -H "Authorization: $std"
+```
+
+Tras eliminar, el listado ya no muestra el documento, la descarga responde
+`404`, la fila sigue en `Documentos` con `Eliminado = 1` y el archivo físico
+sigue en el directorio configurado.
+
+| Código | Significado |
+|---|---|
+| 201 | Documento subido y metadatos persistidos. |
+| 200 | Listado o descarga correctos. |
+| 204 | Eliminación lógica completada. |
+| 400 | Archivo ausente, vacío, nombre con ruta, tipo/tamaño inválido. |
+| 401 | Sesión ausente, desconocida, vencida o cerrada. |
+| 403 | Otro Estándar intenta descargar o eliminar un documento ajeno. |
+| 404 | Documento inexistente, eliminado o contenido físico no disponible. |
+| 413 | El archivo supera `Documentos:TamanioMaximoBytes`. |
+| 500 | Fallo controlado de persistencia; la subida compensa el archivo escrito. |
+| 503 | El almacenamiento físico no pudo escribir el archivo. |
+
+El detalle de la pieza está en `docs/manejador-documentos.md`.
+
 ## Cola de correos
 
 Los correos (activación, recuperación y restablecimiento) se encolan en
@@ -361,6 +449,7 @@ dotnet test SistemaDeReservas/SistemaDeReservas.sln
 Cada prueba declara el requisito que verifica con
 `[Trait("Requerimiento", "RF-CA-XX")]`,
 `[Trait("Requerimiento", "RF-GP-XX")]`,
+`[Trait("Requerimiento", "RF-DOC-XX")]`,
 `[Trait("Requerimiento", "RF-NOT-XX")]`,
 `[Trait("Requerimiento", "RF-NEG-XX")]` o
 `[Trait("Requerimiento", "RD-XX")]`.
@@ -368,41 +457,42 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **439 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
-  de correo, las pruebas de API, que invocan los controladores en memoria,
-  y el flujo real permisos–reservas con repositorios de prueba. Esta suite
-  **no** usa `WebApplicationFactory` ni un servidor HTTP real, por lo que
-  no hay casos de integración HTTP. No necesitan base de datos ni servidor.
-- **Entorno con persistencia**: los **15 casos de persistencia LocalDB**
+  **515 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  de correo, de documentos, las pruebas de API, que invocan los
+  controladores en memoria, y el flujo real permisos–reservas con
+  repositorios de prueba. Esta suite **no** usa `WebApplicationFactory` ni
+  un servidor HTTP real, por lo que no hay casos de integración HTTP. No
+  necesitan base de datos ni servidor.
+- **Entorno con persistencia**: los **19 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
   crea su propia base `Reservas_Tests_*`, aplica las migraciones sobre una
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 454 casos salen de **274 métodos de prueba**: 209 `[Fact]`, 50
-`[Theory]` y 15 `[LocalDbFact]`; las teorías se expanden en 230 casos con
+Los 534 casos salen de **330 métodos de prueba**: 254 `[Fact]`, 57
+`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 261 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
-# solo los 15 casos de persistencia LocalDB
+# solo los 19 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 439 casos sin LocalDB
+# solo los 515 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (454).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (534).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
-- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 15
+- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 19
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **454 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **439
-ejecutadas / 0 fallidas / 15 omitidas**.
+Con LocalDB disponible la corrida completa es **534 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **515
+ejecutadas / 0 fallidas / 19 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
 
@@ -420,9 +510,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 454 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 439 ejecutadas, 0 fallidas, **15 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 454 ejecutadas, **15 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 439 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 534 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 515 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 534 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 515 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -447,9 +537,9 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
-> actual, con las operaciones y la integración de la Práctica 3, tiene 454
-> casos. Los resultados históricos no se reescriben ni se vuelven a atribuir
-> a la Práctica 3.
+> actual, con las operaciones de la Práctica 3 y el Manejador de Documentos
+> de la Práctica 4, tiene 534 casos. Los resultados históricos no se
+> reescriben ni se vuelven a atribuir a prácticas posteriores.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada
 contra los seis defectos de la variante A de la Práctica 2: cada uno se
@@ -546,6 +636,8 @@ defecto.
   reserva (RF-NEG-03 a RF-NEG-05).
 - `docs/contrato-negocio.md`: operaciones previstas del módulo de reservas y su
   autorización.
+- `docs/manejador-documentos.md`: Manejador de Documentos (RF-DOC-01 a
+  RF-DOC-04): endpoints, almacenamiento, límites, consistencia y pruebas.
 - `docs/bitacora-asignación-1.md`: bitácora del proyecto.
 - `docs/practica-2-suite-permisos.md`: Práctica 2 — suite de Gestión de
   permisos: relación RF-GP ↔ pruebas, defectos detectados y resultados.
