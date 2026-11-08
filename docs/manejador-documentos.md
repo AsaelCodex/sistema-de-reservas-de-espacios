@@ -136,8 +136,10 @@ $env:Documentos__MargenSolicitudBytes = "1048576"
 3. Solo tras un guardado correcto se persisten los metadatos con el tamaño real.
 4. Si la persistencia falla, se elimina el contenido recién escrito y se
    devuelve `500` con un mensaje genérico. No queda fila ni archivo huérfano.
-   Si la compensación también falla, el fallo se registra internamente y la
-   respuesta sigue siendo genérica: no se exponen rutas, excepciones ni secretos.
+   `IAlmacenDocumentos.EliminarAsync` propaga los fallos reales de borrado y
+   trata como válido el contenido ya inexistente. Si la compensación también
+   falla, el fallo se registra internamente y la respuesta sigue siendo
+   genérica: no se exponen rutas, excepciones ni secretos.
 5. La eliminación lógica **no** invoca `IAlmacenDocumentos.EliminarAsync`; ese
    método existe solo para compensar una subida fallida.
 
@@ -165,7 +167,7 @@ $env:Documentos__MargenSolicitudBytes = "1048576"
 | RF-DOC-04 | `EliminarDocumentoServiceTests.Eliminar_AsOwner_LogicallyDeletesAndKeepsRowAndContent` |
 | RD-06 | `Subir_WithInvalidActor_IsRejectedWithoutWriting`; `Descargar_AsAnotherStandardUser_IsRejected`; `Eliminar_AsAnotherStandardUser_IsRejectedWithoutChanges` |
 | RD-07 | `Subir_WithoutFile_IsRejectedWithoutWriting`; `Subir_WithEmptyFile_IsRejectedWithoutWriting`; `Subir_WhenFileExceedsLimit_IsRejectedWithoutWriting`; `Subir_WithFileNameThatEscapesDirectory_IsRejectedWithoutWriting`; `Subir_WithNonSeekableStream_StoresActualSize`; `Subir_WithNonSeekableStreamOverLimit_LeavesNoMetadataNorContent`; `Subir_WithNonSeekableEmptyStream_LeavesNoMetadataNorContent`; `AlmacenArchivosDocumentosTests.Guardar_WithNonSeekableStream_CountsActualSize`; `...OverLimit_DoesNotLeaveContent`; `...WithEmptyStream_ReturnsEmptyWithoutFinalContent` |
-| RD-08 | `Subir_WhenStorageFails_ReturnsControlledErrorWithoutMetadata`; `Subir_WhenMetadataPersistenceFails_RemovesStoredContent`; `Subir_WhenCompensationFails_LogsInternallyAndKeepsResponseControlled`; `Descargar_WhenPhysicalContentIsMissing_ReturnsControlledError`; `AlmacenArchivosDocumentosTests.Abrir_WithInvalidContentId_ReturnsNull` |
+| RD-08 | `Subir_WhenStorageFails_ReturnsControlledErrorWithoutMetadata`; `Subir_WhenMetadataPersistenceFails_RemovesStoredContent`; `Subir_WhenCompensationFails_LogsInternallyAndKeepsResponseControlled`; `Descargar_WhenPhysicalContentIsMissing_ReturnsControlledError`; `AlmacenArchivosDocumentosTests.Abrir_WithInvalidContentId_ReturnsNull`; `AlmacenArchivosDocumentosTests.Eliminar_WhenContentCannotBeDeleted_PropagatesError`; `AlmacenArchivosDocumentosTests.Eliminar_WithMissingContent_IsNoOp` |
 
 ### API HTTP real (WebApplicationFactory + TestServer)
 

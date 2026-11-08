@@ -150,6 +150,34 @@ public sealed class AlmacenArchivosDocumentosTests : IDisposable
     }
 
     [Fact]
+    [Trait("Requerimiento", "RF-DOC-01")]
+    [Trait("Requerimiento", "RD-08")]
+    public async Task Eliminar_WhenContentCannotBeDeleted_PropagatesError()
+    {
+        var almacen = new AlmacenArchivosDocumentos(_directorio);
+        var contenidoId = new string('A', 32);
+        var ruta = Path.Combine(_directorio, contenidoId);
+        Directory.CreateDirectory(ruta);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => almacen.EliminarAsync(contenidoId));
+
+        Assert.True(Directory.Exists(ruta));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-DOC-01")]
+    public async Task Eliminar_WithMissingContent_IsNoOp()
+    {
+        var almacen = new AlmacenArchivosDocumentos(_directorio);
+        var contenidoId = new string('B', 32);
+
+        await almacen.EliminarAsync(contenidoId);
+
+        Assert.False(File.Exists(Path.Combine(_directorio, contenidoId)));
+    }
+
+    [Fact]
     [Trait("Requerimiento", "RD-08")]
     public async Task Eliminar_WithTraversalId_DoesNotDeleteOutsideTheDirectory()
     {

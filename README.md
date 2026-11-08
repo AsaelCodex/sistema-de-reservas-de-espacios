@@ -46,8 +46,8 @@ implementará en otra entrega.
   operaciones del negocio protegidas por Control de Acceso (RF-NEG-06) y
   los cuatro requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-04).
   El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 546 casos en verde (342 métodos de prueba, las teorías se
-  expanden): 527 casos sin LocalDB —negocio con fakes, seguridad, correo,
+- **Pruebas:** 548 casos en verde (344 métodos de prueba, las teorías se
+  expanden): 529 casos sin LocalDB —negocio con fakes, seguridad, correo,
   documentos, controladores invocados en memoria, pruebas HTTP con
   `WebApplicationFactory` y el flujo real permisos–reservas con repositorios de
   prueba— y 19 casos de persistencia sobre SQL Server LocalDB
@@ -464,7 +464,7 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **527 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  **529 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
   de correo, de documentos, las pruebas de API que invocan los controladores
   en memoria, las pruebas HTTP reales con `WebApplicationFactory`/`TestServer`
   y el flujo real permisos–reservas con repositorios de prueba. Esta parte no
@@ -476,7 +476,7 @@ Cada prueba declara el requisito que verifica con
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 546 casos salen de **342 métodos de prueba**: 266 `[Fact]`, 57
+Los 548 casos salen de **344 métodos de prueba**: 268 `[Fact]`, 57
 `[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 261 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
@@ -484,20 +484,20 @@ Los 546 casos salen de **342 métodos de prueba**: 266 `[Fact]`, 57
 # solo los 19 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 527 casos sin LocalDB
+# solo los 529 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (546).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (548).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
 - **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 19
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **546 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **527
+Con LocalDB disponible la corrida completa es **548 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **529
 ejecutadas / 0 fallidas / 19 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
@@ -516,9 +516,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 546 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 527 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 546 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 527 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 548 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 529 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 548 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 529 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -544,7 +544,7 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
 > actual, con las operaciones de la Práctica 3 y el Manejador de Documentos
-> de la Práctica 4, tiene 546 casos. Los resultados históricos no se
+> de la Práctica 4, tiene 548 casos. Los resultados históricos no se
 > reescriben ni se vuelven a atribuir a prácticas posteriores.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada

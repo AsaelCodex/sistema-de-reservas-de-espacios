@@ -29,6 +29,8 @@ public interface IAlmacenDocumentos
     /// <summary>
     /// Elimina el contenido físico. Se usa para deshacer una subida cuando la
     /// persistencia de metadatos falla; no forma parte de la eliminación lógica.
+    /// Si el contenido ya no existe la operación es válida; un fallo real de
+    /// borrado se propaga al llamador.
     /// </summary>
     Task EliminarAsync(string contenidoId, CancellationToken cancellationToken = default);
 }

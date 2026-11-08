@@ -146,7 +146,14 @@ public sealed class AlmacenArchivosDocumentos : IAlmacenDocumentos
     {
         if (EsContenidoIdValido(contenidoId))
         {
-            EliminarSilencioso(RutaDe(contenidoId));
+            // File.Delete no falla si el archivo ya no existe; si el borrado
+            // real falla (permisos, bloqueo, ruta ocupada) la excepción se
+            // propaga para que la compensación pueda registrarla. Si el
+            // almacén aún no existe no hay contenido que eliminar.
+            if (Directory.Exists(_raiz))
+            {
+                File.Delete(RutaDe(contenidoId));
+            }
         }
 
         return Task.CompletedTask;
