@@ -140,6 +140,7 @@ public class DocumentosControllerTests
         var respuesta = Assert.IsType<CreatedResult>(resultado);
         Assert.Equal(StatusCodes.Status201Created, respuesta.StatusCode);
         var documento = Assert.Single(_documentos.Documentos);
+        Assert.Equal($"/api/documentos/{documento.Id}/contenido", respuesta.Location);
         Assert.Equal(usuario.Id, documento.UsuarioId);
         Assert.Equal("informe.pdf", documento.NombreOriginal);
         Assert.Equal("application/pdf", documento.Tipo);

@@ -74,7 +74,7 @@ public class DocumentosController : ControllerBase
             return resultado.Estado switch
             {
                 EstadoSubidaDocumento.Subido => Created(
-                    $"/api/documentos/{resultado.Documento!.Id}",
+                    $"/api/documentos/{resultado.Documento!.Id}/contenido",
                     Proyectar(resultado.Documento)),
                 EstadoSubidaDocumento.DatosInvalidos =>
                     BadRequest(new { mensaje = resultado.Mensaje }),
