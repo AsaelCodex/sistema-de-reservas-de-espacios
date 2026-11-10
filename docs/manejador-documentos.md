@@ -107,6 +107,9 @@ $env:Documentos__MargenSolicitudBytes = "1048576"
 
 - La ruta relativa se resuelve contra el directorio de contenido de la API.
 - Al iniciar, la API rechaza una ruta que esté dentro de `wwwroot`.
+- En el contenedor, `Documentos__DirectorioAlmacenamiento` vale
+  `/app/documentos`, respaldado por el volumen nombrado `documentos`. Los
+  archivos no forman parte de la imagen.
 - El directorio se crea al subir el primer documento.
 - El nombre físico es un identificador hexadecimal de 32 caracteres generado
   por el servidor. No se usa el nombre original para construir rutas.
@@ -248,10 +251,31 @@ curl.exe -s -X DELETE "$base/api/documentos/<id>" -H "Authorization: $std"
 - La fila sigue en `Documentos` con `Eliminado = 1`.
 - El archivo físico sigue en el directorio configurado.
 
-## 9. Limitaciones y pendientes
+## 9. Persistencia en contenedor (RF-DOC-05)
 
-- **RF-DOC-05:** la ruta ya es configurable y no está en `wwwroot`, pero el
-  volumen Docker persistente se implementará en otra entrega.
+`docker-compose.yml` monta tres volúmenes nombrados:
+
+| Volumen | Ruta en el contenedor | Contenido |
+|---|---|---|
+| `sqlserver-datos` | `/var/opt/mssql` | Base de datos |
+| `documentos` | `/app/documentos` | Contenido subido |
+| `correos` | `/app/correo-salida` | Correos `.eml` |
+
+Verificación realizada con el proyecto Compose aislado
+`reservas-verificacion`:
+
+1. Subir un documento y anotar su identificador y hash SHA-256.
+2. `docker compose -p reservas-verificacion down` (sin `-v`).
+3. `docker compose -p reservas-verificacion up -d`.
+4. Iniciar sesión y descargar el mismo documento: `200` y hash idéntico.
+5. Comprobar que el administrador inicial no se duplica y que los `.eml`
+   siguen en `/app/correo-salida`.
+
+`down -v` elimina los volúmenes y, con ellos, los documentos; es una operación
+destructiva. En el host no queda una copia del contenido.
+
+## 10. Limitaciones y pendientes
+
 - **RF-DOC-06:** la auditoría de subida y eliminación no se implementa aquí.
 - No hay frontend, reportes ni antivirus/validación de contenido por firma.
 - Las pruebas HTTP usan `WebApplicationFactory` con `TestServer`, no Kestrel

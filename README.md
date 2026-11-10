@@ -44,10 +44,10 @@ implementará en otra entrega.
   máquina de estados del negocio (RF-NEG-03, RF-NEG-04, RF-NEG-05 y
   RF-NEG-09), la creación y las consultas de reservas (RF-NEG-02), las
   operaciones del negocio protegidas por Control de Acceso (RF-NEG-06) y
-  los cuatro requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-04).
+  los cinco requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-05).
   El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 548 casos en verde (344 métodos de prueba, las teorías se
-  expanden): 529 casos sin LocalDB —negocio con fakes, seguridad, correo,
+- **Pruebas:** 556 casos en verde (349 métodos de prueba, las teorías se
+  expanden): 537 casos sin LocalDB —negocio con fakes, seguridad, correo,
   documentos, controladores invocados en memoria, pruebas HTTP con
   `WebApplicationFactory` y el flujo real permisos–reservas con repositorios de
   prueba— y 19 casos de persistencia sobre SQL Server LocalDB
@@ -88,9 +88,8 @@ implementará en otra entrega.
 | `GET /api/documentos/{id}/contenido` | Descargar el contenido (403 si es de otro Estándar) | Autenticado |
 | `DELETE /api/documentos/{id}` | Eliminación lógica (204; 403 si es de otro Estándar) | Autenticado |
 
-- **Pendiente (piezas posteriores):** RF-DOC-05 (volumen Docker
-  persistente; la ruta configurable ya está preparada) y RF-DOC-06
-  (auditoría), Notificaciones (RF-NOT-01 a RF-NOT-07; la cola de correos
+- **Pendiente (piezas posteriores):** RF-DOC-06 (auditoría),
+  Notificaciones (RF-NOT-01 a RF-NOT-07; la cola de correos
   RF-NOT-08 a RF-NOT-13 ya está implementada), Reportes (RF-REP),
   Auditoría (RF-AUD) y el resto del módulo de negocio (RF-NEG-01,
   RF-NEG-07, RF-NEG-08 y RF-NEG-10).
@@ -104,6 +103,8 @@ implementará en otra entrega.
   omiten con el motivo; ver «Pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
+- Docker con Compose v2, solo para el flujo en contenedor (sección
+  «Contenedor»). Ese flujo no requiere .NET SDK ni SQL Server instalados.
 
 ## Cómo ejecutar el proyecto
 
@@ -150,6 +151,102 @@ dotnet run --project SistemaDeReservas/SistemaDeReservas.API
 
 La API queda disponible en `http://localhost:5137`.
 
+## Contenedor (práctica 4, P4-02)
+
+El flujo completo —API, SQL Server, migraciones, administrador inicial y
+volúmenes— se puede levantar solo con Docker. No hace falta instalar el SDK
+de .NET, SQL Server ni `dotnet-ef` en el equipo.
+
+### Requisitos
+
+- Docker Desktop (o Docker Engine) con Compose v2
+  (`docker compose version`).
+- Puerto `5137` libre en el host.
+
+### Arranque desde una copia limpia
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+En Linux/macOS: `cp .env.example .env`. Copiar el ejemplo basta para esta
+entrega; los valores son ficticios y solo sirven para la demostración local.
+
+La API queda en `http://localhost:5137` (solo HTTP; el contenedor no usa
+certificados locales ni redirecciones HTTPS). El primer arranque tarda hasta
+que SQL Server acepta conexiones y la API aplica las migraciones; los
+registros muestran los reintentos acotados.
+
+Qué ocurre automáticamente:
+
+1. SQL Server 2022 arranca con un volumen nombrado.
+2. La API espera a que SQL Server responda (`healthcheck` de Compose y
+   reintentos acotados en la aplicación).
+3. Se aplican las migraciones existentes (nunca `EnsureCreated`). Un error
+   definitivo impide el arranque y queda registrado.
+4. Si `AdministradorInicial__Habilitado` es `true` y no existe ningún
+   administrador, se crea la cuenta configurada. Los reinicios no modifican
+   cuentas existentes ni sus contraseñas.
+5. Recién entonces Kestrel atiende solicitudes y el worker de correos empieza
+   a consultar la cola.
+
+### Cuenta administradora inicial
+
+Los valores de `.env.example` habilitan una cuenta de demostración:
+
+| Variable | Valor de ejemplo |
+|---|---|
+| `ADMINISTRADOR_INICIAL_CORREO` | `admin@reservas.local` |
+| `ADMINISTRADOR_INICIAL_CONTRASENA` | `Admin_Local_2026!Demo` |
+
+Cambiar estos valores fuera de una demo local. En un despliegue real la
+contraseña se define por entorno y nunca se versiona. Para no crear la cuenta:
+`ADMINISTRADOR_INICIAL_HABILITADO=false`. El registro y la activación de
+usuarios estándar siguen el flujo normal por correo.
+
+### Datos persistentes
+
+| Volumen | Ruta en el contenedor | Contenido |
+|---|---|---|
+| `sqlserver-datos` | `/var/opt/mssql` | Base de datos |
+| `documentos` | `/app/documentos` | Archivos subidos (RF-DOC-05) |
+| `correos` | `/app/correo-salida` | Correos `.eml` de demostración |
+
+- `docker compose down` detiene y elimina los contenedores, pero **conserva**
+  los volúmenes: la base, los documentos y los correos siguen disponibles al
+  volver a levantar con `docker compose up`.
+- `docker compose down -v` elimina también los volúmenes y, con ellos, la base,
+  los documentos y los correos. Es una operación destructiva.
+- `Documentos__DirectorioAlmacenamiento` apunta a `/app/documentos`, dentro del
+  volumen y fuera de la imagen. En el host no queda una copia de los archivos.
+
+### Consultar los correos `.eml`
+
+Sin SMTP configurado, el worker escribe los correos en el volumen `correos`;
+no quedan en la imagen ni en el host. Con la composición en marcha:
+
+```powershell
+docker compose exec api ls /app/correo-salida
+docker compose exec api cat /app/correo-salida/<archivo>.eml
+```
+
+El enlace de activación o el código de recuperación de cada correo se leen de
+ese archivo. También se puede consultar la cola con `GET /api/correos` usando
+una sesión de Administrador.
+
+### Registros y parada
+
+```powershell
+docker compose logs -f api
+docker compose down
+```
+
+La composición se llama `sistema-reservas` y sus volúmenes llevan ese prefijo.
+Para una verificación aislada sin tocar los volúmenes habituales, usar un
+nombre de proyecto distinto, por ejemplo
+`docker compose -p reservas-verificacion up --build`.
+
 ## Sesión, permisos y reservas (práctica 3)
 
 Los ejemplos usan PowerShell y `curl.exe`. Los cuerpos JSON deben enviarse
@@ -183,10 +280,14 @@ $std = "Bearer $($respuesta.token)"
 
 ### 2. Sesión de Administrador
 
-El registro (`POST /api/usuarios`) siempre crea un Estándar inactivo y **no
-existe seed ni endpoint para el primer Administrador**. Para una base recién
-migrada, registrar y activar la cuenta del administrador igual que en el paso
-anterior:
+En el flujo con contenedor, el administrador inicial se crea
+automáticamente si no existe ninguno (ver «Contenedor» y la cuenta de
+`.env.example`); en ese caso se omite este procedimiento manual.
+
+Para una ejecución local sin `AdministradorInicial__Habilitado`, el registro
+(`POST /api/usuarios`) siempre crea un Estándar inactivo y **no existe otro
+endpoint para el primer Administrador**. Se registra y activa la cuenta del
+administrador igual que en el paso anterior:
 
 ```powershell
 curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
@@ -361,6 +462,9 @@ $env:Documentos__MargenSolicitudBytes = "1048576"
 ```
 
 - La ruta relativa se resuelve contra el directorio de contenido de la API.
+- En el contenedor, `Documentos__DirectorioAlmacenamiento` vale
+  `/app/documentos`, respaldado por el volumen nombrado `documentos`
+  (sección «Contenedor»).
 - La API rechaza al iniciar una ruta dentro de `wwwroot`.
 - El límite por defecto del archivo es 10 MiB. El límite de la solicitud
   multipart es `TamanioMaximoBytes + MargenSolicitudBytes` (1 MiB de margen por
@@ -464,7 +568,7 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **529 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  **537 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
   de correo, de documentos, las pruebas de API que invocan los controladores
   en memoria, las pruebas HTTP reales con `WebApplicationFactory`/`TestServer`
   y el flujo real permisos–reservas con repositorios de prueba. Esta parte no
@@ -476,28 +580,28 @@ Cada prueba declara el requisito que verifica con
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 548 casos salen de **344 métodos de prueba**: 268 `[Fact]`, 57
-`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 261 casos con
+Los 556 casos salen de **349 métodos de prueba**: 272 `[Fact]`, 58
+`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 265 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
 # solo los 19 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 529 casos sin LocalDB
+# solo los 537 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (548).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (556).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
 - **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 19
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **548 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **529
+Con LocalDB disponible la corrida completa es **556 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **537
 ejecutadas / 0 fallidas / 19 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
@@ -516,9 +620,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 548 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 529 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 548 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 529 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 556 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 537 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 556 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 537 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -544,7 +648,7 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
 > actual, con las operaciones de la Práctica 3 y el Manejador de Documentos
-> de la Práctica 4, tiene 548 casos. Los resultados históricos no se
+> de la Práctica 4, tiene 556 casos. Los resultados históricos no se
 > reescriben ni se vuelven a atribuir a prácticas posteriores.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada
