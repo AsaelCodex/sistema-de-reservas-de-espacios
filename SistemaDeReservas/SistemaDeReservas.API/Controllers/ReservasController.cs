@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Models;
+using SistemaDeReservas.Business.Clima;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Reservations;
@@ -21,17 +22,20 @@ public class ReservasController : ControllerBase
     private readonly CrearReservaService _crear;
     private readonly ListadoReservasService _listado;
     private readonly TransicionReservaService _transicion;
+    private readonly EvaluacionClimaticaService _evaluacionClimatica;
     private readonly SesionService _sesion;
 
     public ReservasController(
         CrearReservaService crear,
         ListadoReservasService listado,
         TransicionReservaService transicion,
+        EvaluacionClimaticaService evaluacionClimatica,
         SesionService sesion)
     {
         _crear = crear;
         _listado = listado;
         _transicion = transicion;
+        _evaluacionClimatica = evaluacionClimatica;
         _sesion = sesion;
     }
 
@@ -174,6 +178,73 @@ public class ReservasController : ControllerBase
         CancellationToken cancellationToken) =>
         TransicionarAsync(id, EstadoReserva.Finalizada, authorization, cancellationToken);
 
+    [HttpGet("{id:guid}/evaluacion-climatica")]
+    [RequiereRol(NivelOperacion.Autenticado)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType(StatusCodes.Status504GatewayTimeout)]
+    public async Task<IActionResult> GetEvaluacionClimatica(
+        Guid id,
+        [FromHeader(Name = "Authorization")] string? authorization,
+        CancellationToken cancellationToken)
+    {
+        var consulta = await _sesion.ConsultarUsuarioAsync(authorization, cancellationToken);
+        if (consulta.Estado == EstadoConsulta.Rechazado || consulta.Usuario is null)
+        {
+            return StatusCode(StatusCodes.Status401Unauthorized, new { mensaje = consulta.Mensaje });
+        }
+
+        var resultado = await _evaluacionClimatica.EvaluarAsync(
+            Actor(consulta.Usuario.Id, consulta.Usuario.Rol),
+            id,
+            cancellationToken);
+
+        return resultado.Estado switch
+        {
+            EstadoEvaluacionClimatica.Evaluada =>
+                Ok(ProyectarEvaluacion(resultado)),
+            EstadoEvaluacionClimatica.DatosInvalidos =>
+                BadRequest(new { mensaje = resultado.Mensaje }),
+            EstadoEvaluacionClimatica.ReservaNoEncontrada =>
+                NotFound(new { mensaje = resultado.Mensaje }),
+            EstadoEvaluacionClimatica.ActorInvalido or
+                EstadoEvaluacionClimatica.PermisoDenegado =>
+                StatusCode(StatusCodes.Status403Forbidden, new { mensaje = resultado.Mensaje }),
+            EstadoEvaluacionClimatica.FechaPasada or
+                EstadoEvaluacionClimatica.HorarioIniciado or
+                EstadoEvaluacionClimatica.FueraDeHorizonte or
+                EstadoEvaluacionClimatica.CoberturaIncompleta =>
+                StatusCode(
+                    StatusCodes.Status422UnprocessableEntity,
+                    new { mensaje = resultado.Mensaje }),
+            EstadoEvaluacionClimatica.ClaveNoConfigurada or
+                EstadoEvaluacionClimatica.ClaveInvalida or
+                EstadoEvaluacionClimatica.CuotaAgotada or
+                EstadoEvaluacionClimatica.ProveedorNoDisponible =>
+                StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new { mensaje = resultado.Mensaje }),
+            EstadoEvaluacionClimatica.TiempoAgotado =>
+                StatusCode(
+                    StatusCodes.Status504GatewayTimeout,
+                    new { mensaje = resultado.Mensaje }),
+            EstadoEvaluacionClimatica.ErrorProveedor or
+                EstadoEvaluacionClimatica.RespuestaProveedorInvalida =>
+                StatusCode(
+                    StatusCodes.Status502BadGateway,
+                    new { mensaje = resultado.Mensaje }),
+            _ => StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { mensaje = "No fue posible completar la operación." })
+        };
+    }
+
     private async Task<IActionResult> TransicionarAsync(
         Guid id,
         EstadoReserva destino,
@@ -232,4 +303,37 @@ public class ReservasController : ControllerBase
         estado = reserva.Estado.ToString(),
         creadaEn = reserva.CreadaEn
     };
+
+    /// <summary>
+    /// Respuesta propia de nuestra operación: no replica el JSON del
+    /// proveedor ni incluye claves, URLs o detalles internos.
+    /// </summary>
+    private static object ProyectarEvaluacion(ResultadoEvaluacionClimatica resultado)
+    {
+        var evaluacion = resultado.Evaluacion!;
+        return new
+        {
+            reservaId = evaluacion.ReservaId,
+            fecha = evaluacion.Fecha,
+            horaInicio = evaluacion.HoraInicio,
+            horaFin = evaluacion.HoraFin,
+            zonaHoraria = evaluacion.ZonaHoraria,
+            ubicacion = new
+            {
+                nombre = evaluacion.Ubicacion.Nombre,
+                latitud = evaluacion.Ubicacion.Latitud,
+                longitud = evaluacion.Ubicacion.Longitud
+            },
+            probabilidadMaximaLluvia = evaluacion.ProbabilidadMaximaLluvia,
+            umbralProbabilidadLluvia = evaluacion.UmbralProbabilidadLluvia,
+            advertenciaLluvia = evaluacion.AdvertenciaLluvia,
+            horasEvaluadas = evaluacion.Horas.Select(hora => new
+            {
+                hora = hora.Hora,
+                probabilidadLluvia = hora.ProbabilidadLluvia
+            }),
+            orientacion = "Orientación para actividades al aire libre.",
+            mensaje = resultado.Mensaje
+        };
+    }
 }

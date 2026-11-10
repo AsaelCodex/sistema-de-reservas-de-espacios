@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.Features;
 using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Startup;
 using SistemaDeReservas.API.Workers;
+using SistemaDeReservas.Business.Clima;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.Documentos;
 using SistemaDeReservas.Business.GestionPermisos;
@@ -14,11 +15,13 @@ using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
+using SistemaDeReservas.Core.Weather;
 using SistemaDeReservas.Infrastructure.Data;
 using SistemaDeReservas.Infrastructure.Email;
 using SistemaDeReservas.Infrastructure.Repositories;
 using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Infrastructure.Storage;
+using SistemaDeReservas.Infrastructure.Weather;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -80,6 +83,41 @@ if (EstaDentroDe(rutaDocumentos, rutaWwwRoot))
     throw new InvalidOperationException(
         "Documentos:DirectorioAlmacenamiento must be outside wwwroot");
 }
+
+// P4-03: ubicación única del recinto, zona horaria y umbral de lluvia. La
+// clave de WeatherAPI es independiente: si falta, la aplicación arranca y solo
+// la evaluación climática responde de forma controlada.
+var opcionesClima = new OpcionesEvaluacionClimatica(
+    new UbicacionClima(
+        builder.Configuration["Clima:Ubicacion:Nombre"] ??
+            "ITLA, La Caleta, Santo Domingo Este",
+        builder.Configuration.GetValue<double?>("Clima:Ubicacion:Latitud") ??
+            18.4512,
+        builder.Configuration.GetValue<double?>("Clima:Ubicacion:Longitud") ??
+            -69.6626,
+        builder.Configuration["Clima:Ubicacion:ZonaHoraria"] ??
+            "America/Santo_Domingo"),
+    builder.Configuration.GetValue<int?>("Clima:UmbralProbabilidadLluvia") ??
+        OpcionesEvaluacionClimatica.UmbralPredeterminado);
+opcionesClima.Validar();
+
+var timeoutClimaSegundos =
+    builder.Configuration.GetValue<int?>("Clima:TimeoutSegundos") ?? 10;
+if (timeoutClimaSegundos is <= 0 or > 60)
+{
+    throw new InvalidOperationException(
+        "Clima:TimeoutSegundos must be between 1 and 60");
+}
+
+var diasPronosticoClima =
+    builder.Configuration.GetValue<int?>("Clima:DiasPronostico") ?? 3;
+if (diasPronosticoClima is < 1 or > 14)
+{
+    throw new InvalidOperationException(
+        "Clima:DiasPronostico must be between 1 and 14");
+}
+
+var weatherApiKey = builder.Configuration["WeatherApi:ApiKey"] ?? string.Empty;
 
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -173,6 +211,29 @@ builder.Services.AddScoped<SubirDocumentoService>(sp =>
 builder.Services.AddScoped<ListadoDocumentosService>();
 builder.Services.AddScoped<DescargarDocumentoService>();
 builder.Services.AddScoped<EliminarDocumentoService>();
+
+// P4-03: el cliente externo usa un host HTTPS fijo, no registra la URL con la
+// clave y aplica su propio tiempo de espera sobre la cancelación del usuario.
+builder.Services.AddSingleton(opcionesClima);
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services
+    .AddHttpClient("WeatherApi", cliente =>
+    {
+        cliente.Timeout = Timeout.InfiniteTimeSpan;
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false
+    })
+    .RemoveAllLoggers();
+builder.Services.AddScoped<IProveedorClima>(sp =>
+    new ClienteWeatherApi(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient("WeatherApi"),
+        weatherApiKey,
+        TimeSpan.FromSeconds(timeoutClimaSegundos),
+        diasPronosticoClima));
+builder.Services.AddScoped<EvaluacionClimaticaService>();
+
 builder.Services.AddScoped<ProcesadorColaCorreos>();
 builder.Services.AddHostedService<ColaCorreosWorker>();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi

@@ -8,12 +8,14 @@ using Microsoft.AspNetCore.Routing;
 using SistemaDeReservas.API.Autorizacion;
 using SistemaDeReservas.API.Controllers;
 using SistemaDeReservas.API.Models;
+using SistemaDeReservas.Business.Clima;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.GestionPermisos;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
+using SistemaDeReservas.Core.Weather;
 using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
 
@@ -28,10 +30,21 @@ public class ReservasControllerTests
 {
     private static readonly DateTime Fecha = new(2026, 11, 10);
 
+    private static readonly OpcionesEvaluacionClimatica OpcionesClima = new(
+        new UbicacionClima(
+            "ITLA, La Caleta, Santo Domingo Este",
+            18.4512,
+            -69.6626,
+            "America/Santo_Domingo"),
+        60);
+
     private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeSesionRepository _sesiones = new();
     private readonly FakePermisoOtorgadoRepository _permisos = new();
     private readonly FakeReservaRepository _reservas = new();
+    private readonly FakeProveedorClima _clima = new();
+    private readonly FakeTimeProvider _reloj = new(
+        new DateTimeOffset(2026, 11, 10, 13, 0, 0, TimeSpan.Zero));
     private readonly SesionService _sesion;
     private readonly ReservasController _controller;
     private readonly AutorizacionRolFilter _filtro;
@@ -45,6 +58,8 @@ public class ReservasControllerTests
                 new AutorizacionPermisosService(_usuarios, _permisos)),
             new ListadoReservasService(_reservas),
             new TransicionReservaService(_reservas),
+            new EvaluacionClimaticaService(
+                _reservas, _clima, _reloj, OpcionesClima),
             _sesion);
         _filtro = new AutorizacionRolFilter(_sesion);
     }
@@ -61,6 +76,7 @@ public class ReservasControllerTests
     [InlineData("PutRechazar")]
     [InlineData("PutCancelar")]
     [InlineData("PutFinalizar")]
+    [InlineData("GetEvaluacionClimatica")]
     public async Task Operations_WithoutSession_ReturnUnauthorized(string operacion)
     {
         var resultado = await EjecutarAsync(operacion, null);
@@ -78,6 +94,7 @@ public class ReservasControllerTests
     [InlineData("PutRechazar")]
     [InlineData("PutCancelar")]
     [InlineData("PutFinalizar")]
+    [InlineData("GetEvaluacionClimatica")]
     public async Task Operations_WithUnknownSession_ReturnUnauthorized(string operacion)
     {
         var resultado = await EjecutarAsync(operacion, "Bearer 0123456789ABCDEF");
@@ -95,6 +112,7 @@ public class ReservasControllerTests
     [InlineData("PutRechazar")]
     [InlineData("PutCancelar")]
     [InlineData("PutFinalizar")]
+    [InlineData("GetEvaluacionClimatica")]
     public async Task Operations_WithExpiredSession_ReturnUnauthorized(string operacion)
     {
         var usuario = await CrearUsuarioAsync(Rol.Estandar);
@@ -115,6 +133,7 @@ public class ReservasControllerTests
     [InlineData("PutRechazar")]
     [InlineData("PutCancelar")]
     [InlineData("PutFinalizar")]
+    [InlineData("GetEvaluacionClimatica")]
     public async Task Operations_WithClosedSession_ReturnUnauthorized(string operacion)
     {
         var usuario = await CrearUsuarioAsync(Rol.Estandar);
@@ -154,6 +173,7 @@ public class ReservasControllerTests
     [InlineData("PutConfirmar", NivelOperacion.Administrador)]
     [InlineData("PutRechazar", NivelOperacion.Administrador)]
     [InlineData("PutFinalizar", NivelOperacion.Administrador)]
+    [InlineData("GetEvaluacionClimatica", NivelOperacion.Autenticado)]
     [InlineData("Post", NivelOperacion.Autenticado)]
     [InlineData("GetMias", NivelOperacion.Autenticado)]
     [InlineData("PutCancelar", NivelOperacion.Autenticado)]
@@ -328,6 +348,114 @@ public class ReservasControllerTests
         Assert.Equal(StatusCodes.Status403Forbidden, respuesta.StatusCode);
     }
 
+    // P4-03: el propietario puede evaluar su reserva. La respuesta aplica
+    // nuestra regla y la reserva no cambia de estado.
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    [Trait("Requerimiento", "RD-06")]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task GetEvaluacionClimatica_AsOwner_ReturnsEvaluationWithoutChangingState()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(propietario);
+        var reserva = ReservaExistente(propietario.Id);
+        await _reservas.GuardarAsync(reserva);
+        _clima.Resultado = ResultadoPronosticoClima.Exito(
+            Pronostico((10, 59), (11, 61)));
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
+        var cuerpo = JsonSerializer.Serialize(respuesta.Value);
+        Assert.Contains("\"probabilidadMaximaLluvia\":61", cuerpo);
+        Assert.Contains("\"advertenciaLluvia\":true", cuerpo);
+        Assert.Equal(EstadoReserva.Solicitada, reserva.Estado);
+        Assert.Equal(0, _reservas.Actualizaciones);
+        Assert.Equal(1, _clima.Llamadas);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    [Trait("Requerimiento", "RD-06")]
+    public async Task GetEvaluacionClimatica_AsAdministrator_CanEvaluateForeignReservation()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var administrador = await CrearUsuarioAsync(Rol.Administrador);
+        var token = await AbrirSesionAsync(administrador);
+        var reserva = ReservaExistente(propietario.Id);
+        await _reservas.GuardarAsync(reserva);
+        _clima.Resultado = ResultadoPronosticoClima.Exito(
+            Pronostico((10, 20), (11, 30)));
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
+        Assert.Equal(1, _clima.Llamadas);
+    }
+
+    // RD-06: otro Estándar recibe 403 y el proveedor no se consulta.
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    [Trait("Requerimiento", "RD-06")]
+    public async Task GetEvaluacionClimatica_AsOtherStandardUser_ReturnsForbiddenWithoutProviderCall()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var otro = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(otro);
+        var reserva = ReservaExistente(propietario.Id);
+        await _reservas.GuardarAsync(reserva);
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status403Forbidden, respuesta.StatusCode);
+        Assert.Equal(0, _clima.Llamadas);
+        Assert.Equal(EstadoReserva.Solicitada, reserva.Estado);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task GetEvaluacionClimatica_WithUnknownReservation_ReturnsNotFoundWithoutProviderCall()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(propietario);
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            Guid.NewGuid(), $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status404NotFound, respuesta.StatusCode);
+        Assert.Equal(0, _clima.Llamadas);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    [Trait("Requerimiento", "RD-08")]
+    public async Task GetEvaluacionClimatica_WhenKeyIsMissing_ReturnsControlledServiceUnavailable()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(propietario);
+        var reserva = ReservaExistente(propietario.Id);
+        await _reservas.GuardarAsync(reserva);
+        _clima.Resultado = ResultadoPronosticoClima.Fallo(
+            ErrorProveedorClima.ClaveAusente);
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, respuesta.StatusCode);
+        var cuerpo = JsonSerializer.Serialize(respuesta.Value);
+        Assert.Contains("configurada", cuerpo);
+        Assert.DoesNotContain("WeatherAPI", cuerpo, StringComparison.OrdinalIgnoreCase);
+    }
+
     // RF-NEG-04 / RF-NEG-05: cancelar exige ser propietario o Administrador.
     [Fact]
     [Trait("Requerimiento", "RF-NEG-04")]
@@ -485,6 +613,15 @@ public class ReservasControllerTests
         HoraFin = new TimeSpan(12, 0, 0)
     };
 
+    private static PronosticoClima Pronostico(
+        params (int Hora, int Probabilidad)[] horas) =>
+        new(
+            "America/Santo_Domingo",
+            horas
+                .Select(hora => new HoraPronosticoClima(
+                    Fecha.AddHours(hora.Hora), hora.Probabilidad))
+                .ToArray());
+
     private static Reserva ReservaExistente(
         Guid usuarioId,
         Guid? id = null,
@@ -519,6 +656,8 @@ public class ReservasControllerTests
             "PutCancelar" => await _controller.PutCancelar(
                 id ?? Guid.NewGuid(), authorization, CancellationToken.None),
             "PutFinalizar" => await _controller.PutFinalizar(
+                id ?? Guid.NewGuid(), authorization, CancellationToken.None),
+            "GetEvaluacionClimatica" => await _controller.GetEvaluacionClimatica(
                 id ?? Guid.NewGuid(), authorization, CancellationToken.None),
             _ => throw new ArgumentOutOfRangeException(nameof(operacion))
         };
