@@ -173,10 +173,11 @@ docker compose up --build
 En Linux/macOS: `cp .env.example .env`. Copiar el ejemplo basta para esta
 entrega; los valores son ficticios y solo sirven para la demostración local.
 
-La API queda en `http://localhost:5137` (solo HTTP; el contenedor no usa
-certificados locales ni redirecciones HTTPS). El primer arranque tarda hasta
-que SQL Server acepta conexiones y la API aplica las migraciones; los
-registros muestran los reintentos acotados.
+La API queda en `http://localhost:5137` (solo HTTP; se publica únicamente en
+la interfaz de loopback `127.0.0.1` y el contenedor no usa certificados
+locales ni redirecciones HTTPS). El primer arranque tarda hasta que SQL Server
+acepta conexiones y la API aplica las migraciones; los registros muestran los
+reintentos acotados.
 
 Qué ocurre automáticamente:
 
