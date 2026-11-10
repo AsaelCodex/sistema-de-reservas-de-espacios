@@ -51,8 +51,8 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
   La evaluación climática de reservas (P4-03) también está implementada y
   verificada, con evidencia para RD-06, RD-07, RD-08, RD-09 y RD-12.
   El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 650 casos en verde (397 métodos de prueba, las teorías se
-  expanden): 631 casos sin LocalDB —negocio con fakes, seguridad, correo,
+- **Pruebas:** 659 casos en verde (401 métodos de prueba, las teorías se
+  expanden): 640 casos sin LocalDB —negocio con fakes, seguridad, correo,
   documentos, evaluación climática, controladores invocados en memoria,
   pruebas HTTP con `WebApplicationFactory` y el flujo real permisos–reservas
   con repositorios de prueba— y 19 casos de persistencia sobre SQL Server
@@ -691,7 +691,7 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **631 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  **640 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
   de correo, de documentos, de evaluación climática, las pruebas de API que
   invocan los controladores en memoria, las pruebas HTTP reales con
   `WebApplicationFactory`/`TestServer` y el flujo real permisos–reservas con
@@ -704,28 +704,28 @@ Cada prueba declara el requisito que verifica con
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 650 casos salen de **397 métodos de prueba**: 307 `[Fact]`, 71
-`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 324 casos con
+Los 659 casos salen de **401 métodos de prueba**: 310 `[Fact]`, 72
+`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 330 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
 # solo los 19 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 631 casos sin LocalDB
+# solo los 640 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (650).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (659).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
 - **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 19
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **650 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **631
+Con LocalDB disponible la corrida completa es **659 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **640
 ejecutadas / 0 fallidas / 19 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
@@ -744,9 +744,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 650 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 631 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 650 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 631 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 659 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 640 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 659 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 640 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -772,7 +772,7 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
 > actual, con las operaciones de la Práctica 3 y el Manejador de Documentos
-> de la Práctica 4, tiene 650 casos. Los resultados históricos no se
+> de la Práctica 4, tiene 659 casos. Los resultados históricos no se
 > reescriben ni se vuelven a atribuir a prácticas posteriores.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada
