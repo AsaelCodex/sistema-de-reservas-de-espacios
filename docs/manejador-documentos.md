@@ -261,8 +261,8 @@ curl.exe -s -X DELETE "$base/api/documentos/<id>" -H "Authorization: $std"
 | `documentos` | `/app/documentos` | Contenido subido |
 | `correos` | `/app/correo-salida` | Correos `.eml` |
 
-Verificación realizada con el proyecto Compose aislado
-`reservas-verificacion`:
+Verificación realizada con proyectos Compose aislados (`reservas-verificacion`
+y una copia limpia clonada desde el repositorio, `reservas-clon-limpio`):
 
 1. Subir un documento y anotar su identificador y hash SHA-256.
 2. `docker compose -p reservas-verificacion down` (sin `-v`).
@@ -278,9 +278,10 @@ destructiva. En el host no queda una copia del contenido.
 
 - **RF-DOC-06:** la auditoría de subida y eliminación no se implementa aquí.
 - No hay frontend, reportes ni antivirus/validación de contenido por firma.
-- Las pruebas HTTP usan `WebApplicationFactory` con `TestServer`, no Kestrel
-  real: ejercitan enrutamiento, parser multipart y límites del formulario, pero
-  no la pila de red ni el límite de Kestrel. Las demás pruebas de API invocan el
-  controlador en memoria.
+- Las pruebas HTTP automatizadas usan `WebApplicationFactory` con `TestServer`,
+  no Kestrel real: ejercitan enrutamiento, parser multipart y límites del
+  formulario, pero no la pila de red ni el límite de Kestrel. Las demás pruebas
+  de API invocan el controlador en memoria. La verificación manual en
+  contenedor (sección 9) sí usa Kestrel real y su límite de red.
 - La eliminación lógica no borra archivos físicos; una política de retención o
   purga física queda fuera de esta práctica.
