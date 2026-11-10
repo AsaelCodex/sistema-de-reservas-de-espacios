@@ -25,7 +25,10 @@ estados (RF-NEG-03 a RF-NEG-05 y RF-NEG-09), creación y consultas
 implementada y verificada: subida, listado, descarga y eliminación lógica
 con metadatos persistidos y almacenamiento fuera de `wwwroot`. RF-DOC-05 se
 verifica con el volumen Docker nombrado `documentos`: el contenido sobrevive
-a `docker compose down` sin `-v`.
+a `docker compose down` sin `-v`. La **P4-03 - API externa** añade la
+evaluación climática de una reserva mediante el pronóstico horario de
+WeatherAPI, con autorización por propietario o Administrador, regla del
+60 %, cobertura horaria completa y fallos controlados.
 
 ## Arquitectura
 
@@ -45,14 +48,16 @@ a `docker compose down` sin `-v`.
   RF-NEG-09), la creación y las consultas de reservas (RF-NEG-02), las
   operaciones del negocio protegidas por Control de Acceso (RF-NEG-06) y
   los cinco requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-05).
+  La evaluación climática de reservas (P4-03) también está implementada y
+  verificada, con evidencia para RD-06, RD-07, RD-08, RD-09 y RD-12.
   El detalle y la evidencia están en `docs/matriz-requisitos.md`.
-- **Pruebas:** 556 casos en verde (349 métodos de prueba, las teorías se
-  expanden): 537 casos sin LocalDB —negocio con fakes, seguridad, correo,
-  documentos, controladores invocados en memoria, pruebas HTTP con
-  `WebApplicationFactory` y el flujo real permisos–reservas con repositorios de
-  prueba— y 19 casos de persistencia sobre SQL Server LocalDB
-  (`SistemaDeReservas.Tests/Persistencia`), con una base propia por prueba que
-  se elimina al terminar.
+- **Pruebas:** 659 casos en verde (401 métodos de prueba, las teorías se
+  expanden): 640 casos sin LocalDB —negocio con fakes, seguridad, correo,
+  documentos, evaluación climática, controladores invocados en memoria,
+  pruebas HTTP con `WebApplicationFactory` y el flujo real permisos–reservas
+  con repositorios de prueba— y 19 casos de persistencia sobre SQL Server
+  LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una base propia por
+  prueba que se elimina al terminar.
 - **Endpoints:**
 
 | Método y ruta | Descripción | Rol |
@@ -83,6 +88,7 @@ a `docker compose down` sin `-v`.
 | `PUT /api/reservas/{id}/rechazar` | Rechazar (409 si la transición no procede) | Administrador |
 | `PUT /api/reservas/{id}/cancelar` | Cancelar (propietario o Administrador) | Autenticado |
 | `PUT /api/reservas/{id}/finalizar` | Finalizar (solo desde `Confirmada`) | Administrador |
+| `GET /api/reservas/{id}/evaluacion-climatica` | Evaluación climática de la reserva (propietario o Administrador; 422, 502, 503 o 504 según el caso) | Autenticado |
 | `POST /api/documentos` | Subir un archivo (`multipart/form-data`, campo `archivo`; 413 si supera el límite) | Autenticado |
 | `GET /api/documentos` | Listar documentos activos (propios; todos para Administrador) | Autenticado |
 | `GET /api/documentos/{id}/contenido` | Descargar el contenido (403 si es de otro Estándar) | Autenticado |
@@ -105,6 +111,9 @@ a `docker compose down` sin `-v`.
   `dotnet tool install --global dotnet-ef`
 - Docker con Compose v2, solo para el flujo en contenedor (sección
   «Contenedor»). Ese flujo no requiere .NET SDK ni SQL Server instalados.
+- Acceso a Internet y una clave de WeatherAPI solo para la evaluación
+  climática real (sección «API externa»). Las pruebas automatizadas no
+  llaman a la API real ni necesitan clave.
 
 ## Cómo ejecutar el proyecto
 
@@ -515,6 +524,119 @@ sigue en el directorio configurado.
 
 El detalle de la pieza está en `docs/manejador-documentos.md`.
 
+## API externa — evaluación climática (práctica 4, P4-03)
+
+`GET /api/reservas/{id}/evaluacion-climatica` consulta el pronóstico
+**horario** de WeatherAPI para la fecha y el horario de una reserva
+persistida. No modifica la reserva ni sus transiciones.
+
+- Solo el **propietario** o un **Administrador** pueden evaluarla; la
+  autorización se comprueba antes de consultar al proveedor.
+- Se evalúan las horas completas que intersectan
+  `[HoraInicio, HoraFin)` y se usa `max(chance_of_rain)`.
+- El umbral inicial es **60 %** y es configurable entre 0 y 100. Si se
+  alcanza se advierte y se sugiere un espacio cubierto; si no, no se
+  promete ausencia de lluvia.
+- Se rechazan fechas pasadas, horarios ya iniciados, fechas fuera de las
+  devueltas por el proveedor y cobertura incompleta.
+- La ubicación es única para todos los espacios y no se deduce del
+  nombre: `ITLA, La Caleta, Santo Domingo Este`
+  (`18.4512, -69.6626`, `America/Santo_Domingo`).
+
+### Configuración
+
+```json
+{
+  "Clima": {
+    "Ubicacion": {
+      "Nombre": "ITLA, La Caleta, Santo Domingo Este",
+      "Latitud": 18.4512,
+      "Longitud": -69.6626,
+      "ZonaHoraria": "America/Santo_Domingo"
+    },
+    "UmbralProbabilidadLluvia": 60,
+    "TimeoutSegundos": 10,
+    "DiasPronostico": 3
+  },
+  "WeatherApi": { "ApiKey": "" }
+}
+```
+
+La clave se define por entorno (RD-10):
+
+```powershell
+$env:WeatherApi__ApiKey = "<su-clave-de-weatherapi>"
+```
+
+En el contenedor, definir `WeatherApi__ApiKey` en `.env`; Compose la
+propaga al servicio. `.env.example` solo contiene un marcador ficticio.
+Si la clave falta, la aplicación **arranca igual** y solo esta operación
+responde `503`.
+
+### Ejemplo real
+
+Verificación del 2026-11-10 con una reserva para el 2026-11-11 de
+10:00 a 12:00, en un proyecto Compose aislado y con una clave real
+(no incluida):
+
+```powershell
+curl.exe -s "$base/api/reservas/<id>/evaluacion-climatica" `
+  -H "Authorization: Bearer $token"
+```
+
+Respuesta real (`200`):
+
+```json
+{
+  "reservaId": "84d11dff-2e23-444d-b2fa-baddf42b1de7",
+  "fecha": "2026-11-11",
+  "horaInicio": "10:00:00",
+  "horaFin": "12:00:00",
+  "zonaHoraria": "America/Santo_Domingo",
+  "ubicacion": {
+    "nombre": "ITLA, La Caleta, Santo Domingo Este",
+    "latitud": 18.4512,
+    "longitud": -69.6626
+  },
+  "probabilidadMaximaLluvia": 19,
+  "umbralProbabilidadLluvia": 60,
+  "advertenciaLluvia": false,
+  "horasEvaluadas": [
+    { "hora": "10:00:00", "probabilidadLluvia": 19 },
+    { "hora": "11:00:00", "probabilidadLluvia": 14 }
+  ],
+  "orientacion": "Orientación para actividades al aire libre.",
+  "mensaje": "No se alcanza el umbral configurado de advertencia de lluvia. Esto no garantiza ausencia de lluvia; es una orientación para actividades al aire libre."
+}
+```
+
+Los valores concretos cambian con el pronóstico; lo verificado es la
+forma de la respuesta y la regla aplicada.
+
+### Códigos
+
+| Código | Significado |
+|---|---|
+| 200 | Evaluación calculada con cobertura completa. |
+| 400 | Datos de la reserva inválidos para evaluar. |
+| 401 | Sesión ausente, desconocida, vencida o cerrada. |
+| 403 | Otro Estándar intenta evaluar una reserva ajena. |
+| 404 | Reserva inexistente. |
+| 422 | Fecha pasada, horario iniciado, fuera de horizonte o cobertura incompleta. |
+| 502 | Error remoto o respuesta inválida del proveedor. |
+| 503 | Clave ausente o inválida, cuota agotada o proveedor no disponible. |
+| 504 | Tiempo de espera agotado. |
+
+### Real vs. simulado
+
+- **Real:** la verificación manual anterior usó WeatherAPI, una clave
+  real y red; también se comprobó una clave ficticia (`503`) y la
+  ausencia de clave (`503`), con login, reservas y documentos en `200`.
+- **Simulado:** las pruebas automatizadas usan un `HttpMessageHandler`
+  falso y un reloj fijo; no llaman a la API real ni necesitan clave.
+
+El detalle completo está en `docs/api-externa.md`.
+
 ## Cola de correos
 
 Los correos (activación, recuperación y restablecimiento) se encolan en
@@ -569,11 +691,12 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **537 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
-  de correo, de documentos, las pruebas de API que invocan los controladores
-  en memoria, las pruebas HTTP reales con `WebApplicationFactory`/`TestServer`
-  y el flujo real permisos–reservas con repositorios de prueba. Esta parte no
-  necesita base de datos ni servidor externo.
+  **640 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  de correo, de documentos, de evaluación climática, las pruebas de API que
+  invocan los controladores en memoria, las pruebas HTTP reales con
+  `WebApplicationFactory`/`TestServer` y el flujo real permisos–reservas con
+  repositorios de prueba. Esta parte no necesita base de datos ni servidor
+  externo (la evaluación climática usa un transporte falso).
 - **Entorno con persistencia**: los **19 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
@@ -581,28 +704,28 @@ Cada prueba declara el requisito que verifica con
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 556 casos salen de **349 métodos de prueba**: 272 `[Fact]`, 58
-`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 265 casos con
+Los 659 casos salen de **401 métodos de prueba**: 310 `[Fact]`, 72
+`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 330 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
 # solo los 19 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 537 casos sin LocalDB
+# solo los 640 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (556).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (659).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
 - **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 19
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **556 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **537
+Con LocalDB disponible la corrida completa es **659 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **640
 ejecutadas / 0 fallidas / 19 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
@@ -621,9 +744,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 556 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 537 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 556 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 537 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 659 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 640 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 659 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 640 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -649,7 +772,7 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
 > actual, con las operaciones de la Práctica 3 y el Manejador de Documentos
-> de la Práctica 4, tiene 556 casos. Los resultados históricos no se
+> de la Práctica 4, tiene 659 casos. Los resultados históricos no se
 > reescriben ni se vuelven a atribuir a prácticas posteriores.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada
@@ -748,7 +871,10 @@ defecto.
 - `docs/contrato-negocio.md`: operaciones previstas del módulo de reservas y su
   autorización.
 - `docs/manejador-documentos.md`: Manejador de Documentos (RF-DOC-01 a
-  RF-DOC-04): endpoints, almacenamiento, límites, consistencia y pruebas.
+  RF-DOC-05): endpoints, almacenamiento, límites, consistencia y pruebas.
+- `docs/api-externa.md`: API externa (P4-03): evaluación climática,
+  autorización, regla, horizonte, configuración, errores, ejemplo real y
+  distinción entre verificación real y pruebas simuladas.
 - `docs/bitacora-asignación-1.md`: bitácora del proyecto.
 - `docs/practica-2-suite-permisos.md`: Práctica 2 — suite de Gestión de
   permisos: relación RF-GP ↔ pruebas, defectos detectados y resultados.

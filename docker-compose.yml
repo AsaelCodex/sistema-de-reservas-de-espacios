@@ -50,6 +50,7 @@ services:
       AdministradorInicial__Correo: "${ADMINISTRADOR_INICIAL_CORREO:-}"
       AdministradorInicial__Contrasena: "${ADMINISTRADOR_INICIAL_CONTRASENA:-}"
       Correo__IntervaloSegundos: "5"
+      WeatherApi__ApiKey: "${WeatherApi__ApiKey:-}"
     ports:
       - "127.0.0.1:5137:8080"
     volumes:

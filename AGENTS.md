@@ -64,6 +64,8 @@ documentos (RF-DOC-01 a RF-DOC-05):
 - P4-02 - Contenedor, inicialización automática y persistencia:
   implementada y verificada. RF-DOC-05 queda completo al comprobar que
   el contenido sobrevive a `docker compose down` sin `-v`.
+- P4-03 - API externa (evaluación climática de una reserva con
+  WeatherAPI): implementada y verificada.
 
 El Control de Acceso sigue siendo la base de las demás funcionalidades
 del Core y las operaciones del sistema deberán quedar protegidas por
@@ -93,10 +95,14 @@ RF-DOC-05 se verifica en esta entrega con volúmenes nombrados de
 Docker: documentos, correos `.eml` y base de datos sobreviven a
 `docker compose down` sin `-v`.
 
+La P4-03 (API externa) se implementa en esta misma práctica 4:
+evaluación climática de una reserva mediante el pronóstico horario de
+WeatherAPI, con autorización, regla del 60 %, cobertura completa,
+manejo controlado de fallos y pruebas sin la API real.
+
 Quedan fuera de alcance:
 
 - RF-DOC-06 (auditoría de subidas y eliminaciones).
-- La API externa (P4-03).
 - Frontend, reportes y otras piezas del Core.
 
 ### Antecedentes: práctica 3
@@ -380,3 +386,68 @@ La ejecución completa vive en `docker-compose.yml` (servicios `api` y
 
 El detalle operativo está en la sección «Contenedor» de `README.md` y en
 `docs/manejador-documentos.md`.
+
+## 17. API externa — evaluación climática (práctica 4, P4-03)
+
+La evaluación climática consulta el pronóstico horario de WeatherAPI
+para una reserva persistida. No modifica la reserva ni sus
+transiciones.
+
+- Core: `UbicacionClima`, `HoraPronosticoClima`, `PronosticoClima`,
+  `SolicitudPronosticoClima`, `ErrorProveedorClima`,
+  `ResultadoPronosticoClima` e `IProveedorClima`. El Core no conoce HTTP.
+- Business: `EvaluacionClimaticaService`, `EvaluacionClimatica`,
+  `OpcionesEvaluacionClimatica` y `ResultadoEvaluacionClimatica`.
+- Infrastructure: `ClienteWeatherApi` con
+  `https://api.weatherapi.com/v1/forecast.json`.
+- API: `GET /api/reservas/{id}/evaluacion-climatica` en
+  `ReservasController`.
+
+### Autorización y datos
+
+Solo el propietario o un Administrador pueden evaluar la reserva. La
+sesión se valida con `SesionService` y la autorización se comprueba
+**antes** de consultar al proveedor. El propietario, la fecha y el
+horario salen de la reserva persistida; nunca del cliente.
+
+### Regla y horizonte
+
+- Se usan las horas completas que intersectan `[HoraInicio, HoraFin)`.
+- La probabilidad evaluada es `max(chance_of_rain)` de esas horas.
+- El umbral inicial es 60 % y debe estar entre 0 y 100.
+- Si se alcanza el umbral se advierte y se sugiere un espacio cubierto;
+  si no, no se promete ausencia de lluvia.
+- Se rechazan fechas pasadas, horarios ya iniciados, fechas fuera de las
+  devueltas por el proveedor y cobertura incompleta.
+- Nunca se usa el clima actual ni un horizonte fijo de 72 horas.
+- La ubicación es única y configurable (`Clima:Ubicacion`), en
+  `America/Santo_Domingo`. No se deduce del nombre del espacio.
+- La ubicación de demostración es ITLA, La Caleta, Santo Domingo Este
+  (`18.4512, -69.6626`).
+
+### Configuración y errores
+
+- `Clima:UmbralProbabilidadLluvia` (60), `Clima:TimeoutSegundos` (10) y
+  `Clima:DiasPronostico` (3) se validan al arrancar.
+- `WeatherApi:ApiKey` se lee de `WeatherApi__ApiKey`. Si falta, la
+  aplicación arranca y solo esta operación responde `503`.
+- El cliente usa HTTPS y host fijos, no sigue redirecciones, aplica un
+  tiempo de espera propio, propaga la cancelación del usuario y no
+  registra la URL con la clave.
+- Mapeo HTTP: `400` datos inválidos; `401` sin sesión; `403` actor sin
+  permiso; `404` reserva inexistente; `422` fecha pasada/iniciada/fuera
+  de horizonte/cobertura incompleta; `503` clave ausente o inválida,
+  cuota o proveedor no disponible; `504` timeout; `502` error remoto o
+  respuesta inválida.
+- Las respuestas no exponen claves, URLs, cuerpos del proveedor ni
+  detalles internos.
+
+### Pruebas y documentación
+
+- `SistemaDeReservas.Tests/Clima`: servicio con reloj controlable,
+  umbral 59/60/61, horas parciales, horizonte, cobertura, duplicados,
+  datos inválidos y fallos del proveedor; cliente con transporte falso.
+- `ReservasControllerTests`: sesión, roles, propietario, Administrador,
+  otro Estándar, reserva inexistente y clave ausente.
+- No se llama a la API real en las pruebas automatizadas.
+- La documentación de la pieza está en `docs/api-externa.md`.
