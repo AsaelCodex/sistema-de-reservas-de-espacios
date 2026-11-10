@@ -1,0 +1,62 @@
+# P4-02: composición local aislada para la API y SQL Server.
+# Los valores variables se leen de .env (copiar .env.example). No se versionan
+# credenciales reales ni se pasan como argumentos de construcción.
+name: sistema-reservas
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: "${SQLSERVER_SA_PASSWORD:?Defina SQLSERVER_SA_PASSWORD en .env}"
+    volumes:
+      - sqlserver-datos:/var/opt/mssql
+    healthcheck:
+      # Comprobación real de disponibilidad: el motor responde y todas las bases
+      # están ONLINE. La API además reintenta de forma acotada si SQL todavía no
+      # acepta conexiones o está recuperando datos.
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -b -Q \"SET NOCOUNT ON; IF EXISTS (SELECT 1 FROM sys.databases WHERE state_desc <> 'ONLINE') THROW 51000, 'SQL Server aun recuperando bases', 1; SELECT 1\" || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  api:
+    build:
+      context: .
+      dockerfile: SistemaDeReservas/SistemaDeReservas.API/Dockerfile
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      DB_CONNECTION_STRING: "Server=sqlserver,1433;Database=SistemaReservas;User Id=sa;Password=${SQLSERVER_SA_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      App__PublicBaseUrl: "http://localhost:5137"
+      App__RedirigirHttps: "false"
+      App__DirectorioCorreos: "/app/correo-salida"
+      Documentos__DirectorioAlmacenamiento: "/app/documentos"
+      Documentos__TamanioMaximoBytes: "${DOCUMENTOS_TAMANIO_MAXIMO_BYTES:-10485760}"
+      Documentos__MargenSolicitudBytes: "${DOCUMENTOS_MARGEN_SOLICITUD_BYTES:-1048576}"
+      InicializacionBaseDatos__Habilitada: "true"
+      InicializacionBaseDatos__IntentosMaximos: "12"
+      AdministradorInicial__Habilitado: "${ADMINISTRADOR_INICIAL_HABILITADO:-true}"
+      AdministradorInicial__Nombre: "${ADMINISTRADOR_INICIAL_NOMBRE:-}"
+      AdministradorInicial__Correo: "${ADMINISTRADOR_INICIAL_CORREO:-}"
+      AdministradorInicial__Contrasena: "${ADMINISTRADOR_INICIAL_CONTRASENA:-}"
+      Correo__IntervaloSegundos: "5"
+    ports:
+      - "5137:8080"
+    volumes:
+      - documentos:/app/documentos
+      - correos:/app/correo-salida
+
+volumes:
+  sqlserver-datos:
+  documentos:
+  correos:

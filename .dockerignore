@@ -1,0 +1,31 @@
+# Contexto de construcción de la imagen de la API (P4-02).
+# Nunca se copian secretos, artefactos locales ni contenido generado.
+
+# Control de versiones y configuración local
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Artefactos de compilación y resultados de pruebas
+**/bin/
+**/obj/
+**/TestResults/
+**/*.trx
+**/*.coverage
+
+# Las pruebas no forman parte de la imagen de la API
+SistemaDeReservas/SistemaDeReservas.Tests/
+
+# Contenido generado en ejecución (se monta como volumen)
+**/documentos-almacenados/
+**/correo-salida/
+SistemaDeReservas/SistemaDeReservas.API/wwwroot/
+
+# Entornos de desarrollo y documentación
+.vs/
+.idea/
+.vscode/
+docs/
+.github/
