@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
 using SistemaDeReservas.API.Autorizacion;
+using SistemaDeReservas.API.Startup;
 using SistemaDeReservas.API.Workers;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.Documentos;
@@ -37,8 +38,9 @@ if (string.IsNullOrEmpty(publicBaseUrl))
         "App:PublicBaseUrl configuration is not set");
 }
 
-// RF-DOC-01 y RF-DOC-05 (preparación): límite y ruta de almacenamiento
-// explícitos y configurables. El volumen Docker se implementará aparte.
+// RF-DOC-01 y RF-DOC-05: límite y ruta de almacenamiento explícitos y
+// configurables. En contenedor, Documentos__DirectorioAlmacenamiento apunta al
+// volumen persistente.
 var limiteDocumentos =
     builder.Configuration.GetValue<long?>("Documentos:TamanioMaximoBytes") ??
     SubirDocumentoService.LimitePredeterminadoBytes;
@@ -153,6 +155,7 @@ builder.Services.AddScoped<ListadoUsuariosService>();
 builder.Services.AddScoped<RestablecerContrasenaService>();
 builder.Services.AddScoped<RecuperacionContrasenaService>();
 builder.Services.AddScoped<CambioContrasenaPropiaService>();
+builder.Services.AddScoped<AdministradorInicialService>();
 builder.Services.AddScoped<ListadoCorreosService>();
 builder.Services.AddScoped<CrearSolicitudPermisoService>();
 builder.Services.AddScoped<ListadoSolicitudesService>();
@@ -183,11 +186,18 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+if (builder.Configuration.GetValue("App:RedirigirHttps", true))
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Debe completarse antes de atender operaciones y antes de que el worker de
+// correos consulte las tablas. Un fallo definitivo impide el arranque.
+await app.InicializarAsync();
 
 app.Run();
 
