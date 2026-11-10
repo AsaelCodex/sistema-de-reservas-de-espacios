@@ -50,14 +50,17 @@ oficiales.
 
 ## 4. Etapa actual del proyecto
 
-Actualmente el proyecto se encuentra en la práctica 3 (semanas 4 y 8).
+Actualmente el proyecto se encuentra en la práctica 4 (semana 9).
 
-La pieza que se trabaja durante esta etapa es el contrato del módulo
-de negocio y sus reglas de transición:
+La pieza que se trabaja durante esta etapa es el manejador de
+documentos (RF-DOC-01 a RF-DOC-04):
 
 - Pieza 1 - Control de Acceso: implementada y verificada.
 - Pieza 2 - Gestión de Permisos: implementada y verificada.
-- Módulo de negocio: contrato y reglas de transición en curso.
+- Módulo de negocio: contrato y reglas de transición implementados y
+  verificados en la práctica 3.
+- Pieza 3 - Manejador de documentos: en curso (práctica 4), con la
+  preparación de RF-DOC-05 para una entrega posterior.
 
 El Control de Acceso sigue siendo la base de las demás funcionalidades
 del Core y las operaciones del sistema deberán quedar protegidas por
@@ -65,7 +68,36 @@ del Core y las operaciones del sistema deberán quedar protegidas por
 
 ## 5. Alcance actual
 
-Durante la práctica 3 se trabajará principalmente con:
+### Práctica 4 (alcance actual)
+
+Durante la práctica 4 se trabajará con:
+
+- RD-06
+- RD-07
+- RD-08
+- RD-09
+- RD-12
+
+Y con:
+
+- RF-DOC-01
+- RF-DOC-02
+- RF-DOC-03
+- RF-DOC-04
+
+Se prepara además RF-DOC-05 con una ruta de almacenamiento
+configurable fuera de `wwwroot`. El volumen Docker se implementará en
+otra entrega.
+
+Quedan fuera de alcance:
+
+- RF-DOC-06 (auditoría de subidas y eliminaciones).
+- Docker y la API externa.
+- Frontend, reportes y otras piezas del Core.
+
+### Antecedentes: práctica 3
+
+La práctica 3 trabajó principalmente:
 
 - RD-04
 - RD-07
@@ -235,3 +267,77 @@ RF-CA-03, buscar ese ID en:
 docs/requerimientos-core.md
 
 y trabajar según su descripción y criterio de aceptación.
+
+## 15. Manejador de documentos (práctica 4)
+
+La pieza está implementada en Core, Business, Infrastructure y API:
+
+- Core: `Documento`, `ActorDocumento`, `IDocumentoRepository`,
+  `IAlmacenDocumentos` y `ResultadoGuardadoContenido`.
+- Business: `SubirDocumentoService`, `ListadoDocumentosService`,
+  `DescargarDocumentoService` y `EliminarDocumentoService`.
+- Infrastructure: `DocumentoRepository`, `AlmacenArchivosDocumentos` y la
+  migración `AddDocumentos`.
+- API: `DocumentosController` y configuración en `Program.cs`.
+
+### Endpoints
+
+Todas las operaciones requieren `Authorization: Bearer <token>` y
+declaran `[RequiereRol(NivelOperacion.Autenticado)]`. Como el filtro no
+valida la sesión para ese nivel, el controlador consulta
+`SesionService` en todas las acciones y responde `401` antes de invocar
+al negocio. El propietario se toma solo de la sesión.
+
+| Método y ruta | Descripción | Éxito | Errores principales |
+|---|---|---|---|
+| `POST /api/documentos` | Sube un archivo (`multipart/form-data`, campo `archivo`). | `201` con `Location: /api/documentos/{id}/contenido` | `400`, `401`, `413`, `500`, `503` |
+| `GET /api/documentos` | Lista activos: propios para Estándar, todos para Administrador. | `200` | `401` |
+| `GET /api/documentos/{id}/contenido` | Descarga por endpoint protegido. | `200` | `401`, `403`, `404` |
+| `DELETE /api/documentos/{id}` | Elimina lógicamente. | `204` | `401`, `403`, `404`, `500` |
+
+- `400`: archivo ausente o vacío, nombre con ruta, tipo/tamaño inválido o
+  multipart malformado.
+- `403`: otro usuario Estándar intenta descargar o eliminar un documento
+  ajeno.
+- `404`: documento inexistente, eliminado o contenido físico no
+  disponible.
+- `413`: supera `Documentos:TamanioMaximoBytes` (10 MiB por defecto).
+- `500`: fallo controlado de persistencia; la subida compensa el archivo
+  ya escrito. Si la compensación falla, se registra internamente sin
+  exponer el detalle.
+- `503`: el almacenamiento físico no pudo escribir el archivo.
+
+### Almacenamiento
+
+- `Documentos:DirectorioAlmacenamiento` (por defecto
+  `documentos-almacenados`) es configurable por entorno con
+  `Documentos__DirectorioAlmacenamiento`.
+- La API rechaza al iniciar una ruta dentro de `wwwroot`.
+- El nombre físico es un identificador hexadecimal de 32 caracteres
+  generado por el servidor; el nombre original solo se guarda como
+  metadato.
+- La escritura usa un archivo temporal y un movimiento final.
+- El límite del archivo (`Documentos:TamanioMaximoBytes`) es distinto del
+  límite de la solicitud multipart
+  (`TamanioMaximoBytes + Documentos:MargenSolicitudBytes`, 1 MiB por
+  defecto). `FormOptions` y Kestrel usan el límite de la solicitud.
+- El almacenamiento cuenta los bytes realmente leídos, corta al superar el
+  límite, rechaza contenido vacío y guarda el tamaño real.
+- La eliminación lógica conserva la fila y el contenido físico.
+
+### Pruebas
+
+- `SistemaDeReservas.Tests/Documentos`: servicios y almacenamiento sin
+  levantar la aplicación, incluidos flujos no posicionables y conteo real.
+- `SistemaDeReservas.Tests/API/DocumentosControllerTests.cs`: sesión,
+  roles, autorización, códigos HTTP y validaciones en memoria.
+- `SistemaDeReservas.Tests/API/DocumentosHttpTests.cs`: pipeline HTTP real
+  con `WebApplicationFactory`/`TestServer`, límites del multipart, parser
+  malformado y `Location` descargable.
+- `SistemaDeReservas.Tests/Persistencia/DocumentoPersistenciaTests.cs`:
+  metadatos, listados, eliminación lógica e índice único en SQL Server
+  LocalDB.
+
+Cada prueba declara el requisito con
+`[Trait("Requerimiento", "RF-DOC-XX")]` o `RD-XX`. La documentación de la
+pieza está en `docs/manejador-documentos.md`.
