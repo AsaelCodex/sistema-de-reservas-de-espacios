@@ -1,8 +1,8 @@
-# Manejador de documentos — Práctica 4 (P4-01)
+# Manejador de documentos — Práctica 4 (P4-01 y P4-02)
 
-**Requisitos:** RF-DOC-01 a RF-DOC-04 · RD-06, RD-07, RD-08, RD-09 y RD-12  
-**Preparación para:** RF-DOC-05 (ruta configurable; el volumen Docker se
-implementará en otra entrega)  
+**Requisitos:** RF-DOC-01 a RF-DOC-05 · RD-06, RD-07, RD-08, RD-09, RD-10 y RD-12  
+**Persistencia:** RF-DOC-05 se verifica con el volumen nombrado `documentos`
+en la composición Docker (sección 9)  
 **Fuera de alcance:** RF-DOC-06 (auditoría), frontend, reportes y demás piezas
 del Core.
 
@@ -14,7 +14,7 @@ del Core.
 | RF-DOC-02 | Listado propio para Estándar y listado global para Administrador; nunca incluye eliminados. |
 | RF-DOC-03 | Descarga solo para el propietario o un Administrador; rechazo controlado si el contenido físico no está disponible. |
 | RF-DOC-04 | Eliminación lógica mediante `Documento.Eliminar`; la fila y el contenido físico se conservan. |
-| RF-DOC-05 | Ruta de almacenamiento configurable y validada fuera de `wwwroot`. **No** se crea el volumen Docker en esta entrega. |
+| RF-DOC-05 | Ruta de almacenamiento configurable y validada fuera de `wwwroot`; en contenedor apunta a `/app/documentos`, respaldado por el volumen nombrado `documentos` y verificado tras un reinicio sin `-v`. |
 | RD-06 | Sesión validada en todas las operaciones; propietario tomado de `SesionService`, nunca del cliente. |
 | RD-07 | Validación de archivo ausente/vacío, nombre, tipo, tamaño y límite máximo. |
 | RD-08 | Mensajes controlados; no se exponen rutas internas, excepciones ni el identificador de contenido. |
@@ -107,6 +107,9 @@ $env:Documentos__MargenSolicitudBytes = "1048576"
 
 - La ruta relativa se resuelve contra el directorio de contenido de la API.
 - Al iniciar, la API rechaza una ruta que esté dentro de `wwwroot`.
+- En el contenedor, `Documentos__DirectorioAlmacenamiento` vale
+  `/app/documentos`, respaldado por el volumen nombrado `documentos`. Los
+  archivos no forman parte de la imagen.
 - El directorio se crea al subir el primer documento.
 - El nombre físico es un identificador hexadecimal de 32 caracteres generado
   por el servidor. No se usa el nombre original para construir rutas.
@@ -248,15 +251,37 @@ curl.exe -s -X DELETE "$base/api/documentos/<id>" -H "Authorization: $std"
 - La fila sigue en `Documentos` con `Eliminado = 1`.
 - El archivo físico sigue en el directorio configurado.
 
-## 9. Limitaciones y pendientes
+## 9. Persistencia en contenedor (RF-DOC-05)
 
-- **RF-DOC-05:** la ruta ya es configurable y no está en `wwwroot`, pero el
-  volumen Docker persistente se implementará en otra entrega.
+`docker-compose.yml` monta tres volúmenes nombrados:
+
+| Volumen | Ruta en el contenedor | Contenido |
+|---|---|---|
+| `sqlserver-datos` | `/var/opt/mssql` | Base de datos |
+| `documentos` | `/app/documentos` | Contenido subido |
+| `correos` | `/app/correo-salida` | Correos `.eml` |
+
+Verificación realizada con proyectos Compose aislados (`reservas-verificacion`
+y una copia limpia clonada desde el repositorio, `reservas-clon-limpio`):
+
+1. Subir un documento y anotar su identificador y hash SHA-256.
+2. `docker compose -p reservas-verificacion down` (sin `-v`).
+3. `docker compose -p reservas-verificacion up -d`.
+4. Iniciar sesión y descargar el mismo documento: `200` y hash idéntico.
+5. Comprobar que el administrador inicial no se duplica y que los `.eml`
+   siguen en `/app/correo-salida`.
+
+`down -v` elimina los volúmenes y, con ellos, los documentos; es una operación
+destructiva. En el host no queda una copia del contenido.
+
+## 10. Limitaciones y pendientes
+
 - **RF-DOC-06:** la auditoría de subida y eliminación no se implementa aquí.
 - No hay frontend, reportes ni antivirus/validación de contenido por firma.
-- Las pruebas HTTP usan `WebApplicationFactory` con `TestServer`, no Kestrel
-  real: ejercitan enrutamiento, parser multipart y límites del formulario, pero
-  no la pila de red ni el límite de Kestrel. Las demás pruebas de API invocan el
-  controlador en memoria.
+- Las pruebas HTTP automatizadas usan `WebApplicationFactory` con `TestServer`,
+  no Kestrel real: ejercitan enrutamiento, parser multipart y límites del
+  formulario, pero no la pila de red ni el límite de Kestrel. Las demás pruebas
+  de API invocan el controlador en memoria. La verificación manual en
+  contenedor (sección 9) sí usa Kestrel real y su límite de red.
 - La eliminación lógica no borra archivos físicos; una política de retención o
   purga física queda fuera de esta práctica.

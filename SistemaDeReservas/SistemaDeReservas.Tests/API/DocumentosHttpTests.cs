@@ -51,6 +51,9 @@ public sealed class DocumentosHttpTests : IAsyncLifetime
             "Server=(localdb)\\MSSQLLocalDB;Database=Reservas_Http_No_Usada;" +
             "Trusted_Connection=True;TrustServerCertificate=True");
         EstablecerVariable("App__PublicBaseUrl", "http://localhost");
+        // Las pruebas HTTP usan repositorios falsos: no deben intentar conectar
+        // a SQL Server ni aplicar migraciones al arrancar.
+        EstablecerVariable("InicializacionBaseDatos__Habilitada", "false");
         EstablecerVariable("Documentos__DirectorioAlmacenamiento", _directorio);
         EstablecerVariable("Documentos__TamanioMaximoBytes", LimiteArchivoBytes.ToString());
         EstablecerVariable("Documentos__MargenSolicitudBytes", MargenSolicitudBytes.ToString());

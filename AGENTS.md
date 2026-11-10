@@ -53,14 +53,17 @@ oficiales.
 Actualmente el proyecto se encuentra en la práctica 4 (semana 9).
 
 La pieza que se trabaja durante esta etapa es el manejador de
-documentos (RF-DOC-01 a RF-DOC-04):
+documentos (RF-DOC-01 a RF-DOC-05):
 
 - Pieza 1 - Control de Acceso: implementada y verificada.
 - Pieza 2 - Gestión de Permisos: implementada y verificada.
 - Módulo de negocio: contrato y reglas de transición implementados y
   verificados en la práctica 3.
-- Pieza 3 - Manejador de documentos: en curso (práctica 4), con la
-  preparación de RF-DOC-05 para una entrega posterior.
+- Pieza 3 - Manejador de documentos: implementada y verificada
+  (RF-DOC-01 a RF-DOC-04).
+- P4-02 - Contenedor, inicialización automática y persistencia:
+  implementada y verificada. RF-DOC-05 queda completo al comprobar que
+  el contenido sobrevive a `docker compose down` sin `-v`.
 
 El Control de Acceso sigue siendo la base de las demás funcionalidades
 del Core y las operaciones del sistema deberán quedar protegidas por
@@ -84,15 +87,16 @@ Y con:
 - RF-DOC-02
 - RF-DOC-03
 - RF-DOC-04
+- RF-DOC-05
 
-Se prepara además RF-DOC-05 con una ruta de almacenamiento
-configurable fuera de `wwwroot`. El volumen Docker se implementará en
-otra entrega.
+RF-DOC-05 se verifica en esta entrega con volúmenes nombrados de
+Docker: documentos, correos `.eml` y base de datos sobreviven a
+`docker compose down` sin `-v`.
 
 Quedan fuera de alcance:
 
 - RF-DOC-06 (auditoría de subidas y eliminaciones).
-- Docker y la API externa.
+- La API externa (P4-03).
 - Frontend, reportes y otras piezas del Core.
 
 ### Antecedentes: práctica 3
@@ -341,3 +345,38 @@ al negocio. El propietario se toma solo de la sesión.
 Cada prueba declara el requisito con
 `[Trait("Requerimiento", "RF-DOC-XX")]` o `RD-XX`. La documentación de la
 pieza está en `docs/manejador-documentos.md`.
+
+## 16. Contenedor e inicialización (práctica 4, P4-02)
+
+La ejecución completa vive en `docker-compose.yml` (servicios `api` y
+`sqlserver`) y en `SistemaDeReservas/SistemaDeReservas.API/Dockerfile`
+(imagen multi-etapa .NET 10, usuario `app`). Solo se publica
+`http://localhost:5137`; no hay HTTPS ni certificados locales.
+
+- `.env` está ignorado por Git y excluido del contexto de construcción.
+  `.env.example` contiene valores ficticios funcionales; las credenciales
+  reales se definen por entorno y nunca se versionan ni se pasan como
+  argumentos de construcción.
+- El arranque espera a SQL Server con un `healthcheck` que exige el motor
+  accesible y todas las bases `ONLINE`, más reintentos acotados en la
+  aplicación (`InicializacionBaseDatos:IntentosMaximos`). No hay pausas
+  fijas.
+- Las migraciones se aplican con `MigrateAsync` antes de Kestrel y del
+  worker de correos. Nunca se usa `EnsureCreated`. Un error no transitorio
+  se registra y detiene el arranque; los transitorios de SQL (incluido
+  `1801` mientras una base se recupera) se reintentan.
+- Si `AdministradorInicial:Habilitado` es `true` y no existe **ningún**
+  administrador, se crea la cuenta configurada con el hasher y la política
+  de contraseñas existentes. Los reinicios no duplican, promueven ni
+  modifican cuentas. Un correo ya ocupado es un error fatal. La contraseña
+  no se registra.
+- Volúmenes nombrados: `sqlserver-datos` (`/var/opt/mssql`), `documentos`
+  (`/app/documentos`) y `correos` (`/app/correo-salida`).
+  `Documentos__DirectorioAlmacenamiento` apunta dentro del volumen. Los
+  `.eml` se consultan con `docker compose exec api cat ...` o por la cola.
+- `docker compose down` conserva los volúmenes; `down -v` los elimina. La
+  verificación se hace con un proyecto Compose aislado (por ejemplo,
+  `-p reservas-verificacion`) para no tocar volúmenes del usuario.
+
+El detalle operativo está en la sección «Contenedor» de `README.md` y en
+`docs/manejador-documentos.md`.

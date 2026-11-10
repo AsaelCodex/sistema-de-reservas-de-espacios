@@ -67,3 +67,6 @@ secrets.json
 
 # Contenido de documentos (RF-DOC-05: volumen persistente, nunca en wwwroot)
 documentos-almacenados/
+
+# Correos .eml de demostración generados en ejecución (P4-02)
+correo-salida/
