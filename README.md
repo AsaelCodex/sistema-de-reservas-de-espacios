@@ -21,11 +21,11 @@ verificada. El **módulo de negocio** expone la creación, las consultas y
 las transiciones de reservas mediante endpoints protegidos: máquina de
 estados (RF-NEG-03 a RF-NEG-05 y RF-NEG-09), creación y consultas
 (RF-NEG-02) y operaciones protegidas por Control de Acceso (RF-NEG-06). La
-**Pieza 3 - Manejador de Documentos** (RF-DOC-01 a RF-DOC-04) está
+**Pieza 3 - Manejador de Documentos** (RF-DOC-01 a RF-DOC-05) está
 implementada y verificada: subida, listado, descarga y eliminación lógica
-con metadatos persistidos y almacenamiento fuera de `wwwroot`. RF-DOC-05
-queda preparado con una ruta configurable; el volumen Docker se
-implementará en otra entrega.
+con metadatos persistidos y almacenamiento fuera de `wwwroot`. RF-DOC-05 se
+verifica con el volumen Docker nombrado `documentos`: el contenido sobrevive
+a `docker compose down` sin `-v`.
 
 ## Arquitectura
 

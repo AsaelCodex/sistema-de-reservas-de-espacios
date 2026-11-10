@@ -1,8 +1,8 @@
-# Manejador de documentos — Práctica 4 (P4-01)
+# Manejador de documentos — Práctica 4 (P4-01 y P4-02)
 
-**Requisitos:** RF-DOC-01 a RF-DOC-04 · RD-06, RD-07, RD-08, RD-09 y RD-12  
-**Preparación para:** RF-DOC-05 (ruta configurable; el volumen Docker se
-implementará en otra entrega)  
+**Requisitos:** RF-DOC-01 a RF-DOC-05 · RD-06, RD-07, RD-08, RD-09, RD-10 y RD-12  
+**Persistencia:** RF-DOC-05 se verifica con el volumen nombrado `documentos`
+en la composición Docker (sección 9)  
 **Fuera de alcance:** RF-DOC-06 (auditoría), frontend, reportes y demás piezas
 del Core.
 
@@ -14,7 +14,7 @@ del Core.
 | RF-DOC-02 | Listado propio para Estándar y listado global para Administrador; nunca incluye eliminados. |
 | RF-DOC-03 | Descarga solo para el propietario o un Administrador; rechazo controlado si el contenido físico no está disponible. |
 | RF-DOC-04 | Eliminación lógica mediante `Documento.Eliminar`; la fila y el contenido físico se conservan. |
-| RF-DOC-05 | Ruta de almacenamiento configurable y validada fuera de `wwwroot`. **No** se crea el volumen Docker en esta entrega. |
+| RF-DOC-05 | Ruta de almacenamiento configurable y validada fuera de `wwwroot`; en contenedor apunta a `/app/documentos`, respaldado por el volumen nombrado `documentos` y verificado tras un reinicio sin `-v`. |
 | RD-06 | Sesión validada en todas las operaciones; propietario tomado de `SesionService`, nunca del cliente. |
 | RD-07 | Validación de archivo ausente/vacío, nombre, tipo, tamaño y límite máximo. |
 | RD-08 | Mensajes controlados; no se exponen rutas internas, excepciones ni el identificador de contenido. |
