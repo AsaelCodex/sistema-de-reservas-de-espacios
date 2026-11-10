@@ -456,6 +456,90 @@ public class ReservasControllerTests
         Assert.DoesNotContain("WeatherAPI", cuerpo, StringComparison.OrdinalIgnoreCase);
     }
 
+    // P4-03 / RD-08: cada fallo del proveedor se traduce a un código HTTP
+    // controlado, sin detalles internos.
+    [Theory]
+    [Trait("Requerimiento", "P4-03")]
+    [Trait("Requerimiento", "RD-08")]
+    [InlineData(ErrorProveedorClima.ClaveInvalida, StatusCodes.Status503ServiceUnavailable)]
+    [InlineData(ErrorProveedorClima.CuotaAgotada, StatusCodes.Status503ServiceUnavailable)]
+    [InlineData(ErrorProveedorClima.RedNoDisponible, StatusCodes.Status503ServiceUnavailable)]
+    [InlineData(ErrorProveedorClima.TiempoAgotado, StatusCodes.Status504GatewayTimeout)]
+    [InlineData(ErrorProveedorClima.ErrorRemoto, StatusCodes.Status502BadGateway)]
+    [InlineData(ErrorProveedorClima.RespuestaInvalida, StatusCodes.Status502BadGateway)]
+    public async Task GetEvaluacionClimatica_WhenProviderFails_ReturnsMappedStatus(
+        ErrorProveedorClima error,
+        int esperado)
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(propietario);
+        var reserva = ReservaExistente(propietario.Id);
+        await _reservas.GuardarAsync(reserva);
+        _clima.Resultado = ResultadoPronosticoClima.Fallo(error);
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(esperado, respuesta.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    public async Task GetEvaluacionClimatica_WithPastReservation_ReturnsUnprocessableEntity()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(propietario);
+        var reserva = ReservaExistente(propietario.Id);
+        reserva.Fecha = Fecha.AddDays(-1);
+        await _reservas.GuardarAsync(reserva);
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, respuesta.StatusCode);
+        Assert.Equal(0, _clima.Llamadas);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    public async Task GetEvaluacionClimatica_WithIncompleteCoverage_ReturnsUnprocessableEntity()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(propietario);
+        var reserva = ReservaExistente(propietario.Id);
+        await _reservas.GuardarAsync(reserva);
+        _clima.Resultado = ResultadoPronosticoClima.Exito(
+            Pronostico((10, 30)));
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status422UnprocessableEntity, respuesta.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "P4-03")]
+    [Trait("Requerimiento", "RD-07")]
+    public async Task GetEvaluacionClimatica_WithInvalidTimes_ReturnsBadRequest()
+    {
+        var propietario = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(propietario);
+        var reserva = ReservaExistente(propietario.Id);
+        reserva.HoraInicio = new TimeSpan(12, 0, 0);
+        reserva.HoraFin = new TimeSpan(10, 0, 0);
+        await _reservas.GuardarAsync(reserva);
+
+        var resultado = await _controller.GetEvaluacionClimatica(
+            reserva.Id, $"Bearer {token}", CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status400BadRequest, respuesta.StatusCode);
+        Assert.Equal(0, _clima.Llamadas);
+    }
+
     // RF-NEG-04 / RF-NEG-05: cancelar exige ser propietario o Administrador.
     [Fact]
     [Trait("Requerimiento", "RF-NEG-04")]
