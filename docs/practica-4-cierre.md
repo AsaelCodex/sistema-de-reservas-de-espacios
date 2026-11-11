@@ -424,7 +424,8 @@ No se encontraron otros defectos que impidieran cumplir los requisitos.
     con comillas escapadas (`\"`) cuando no contenía espacios y desde un
     archivo UTF-8 cuando sí los contenía (registro con `"nombre"`).
     El cuerpo y los endpoints son los del README; el resto de comandos se
-    ejecutó literalmente. El texto del README no se modificó por esto.
+    ejecutó literalmente. En D-03 el texto del README no se modificó por
+    esto; la corrección definitiva de los ejemplos quedó en D-04.
   - **Limpieza:** `docker compose -p p4-d03 down -v`, clon temporal
     eliminado y filas locales creadas eliminadas (`Usuarios`,
     `Sesiones` y `CorreosEnCola` quedaron en `0`). Las migraciones
@@ -432,6 +433,46 @@ No se encontraron otros defectos que impidieran cumplir los requisitos.
     documentado.
 - **Alcance:** solo documentación; no cambió código ni configuración, por
   lo que no fue necesario repetir los escenarios funcionales.
+
+### D-04 — README: los ejemplos JSON no funcionaban en PowerShell 5.1
+
+- **Requisito afectado:** revisión acumulada (registro, sesión, permisos y
+  reservas); el evaluador ejecuta los ejemplos del README tal cual.
+- **Descripción:** los ejemplos enviaban el cuerpo con
+  `-d '{"…":"…"}'`. En Windows PowerShell 5.1 las comillas dobles
+  incrustadas se consumen al pasar el argumento a un ejecutable nativo: el
+  cuerpo llega como `{correo:…}` y la API responde `400` («'c' is an
+  invalid start of a property name»). Además el campo `contraseña` exige
+  UTF-8, que la consola no garantiza. El patrón solo funcionaba en
+  PowerShell 7, sin que el README lo advirtiera; D-03 lo dejó anotado como
+  limitación del entorno de comprobación.
+- **Corrección:** se documentó un auxiliar común `Enviar-Json` que escribe
+  el cuerpo en un archivo UTF-8 **sin BOM**
+  (`[IO.File]::WriteAllText` con `UTF8Encoding($false)`) y lo envía con
+  `curl.exe --data-binary "@archivo"`, de modo que PowerShell no
+  reinterpreta las comillas. Los siete ejemplos con cuerpo JSON (registro
+  de Estándar, su login, login del administrador con y sin contenedor,
+  registro local, solicitud de permiso y creación de reserva) usan el
+  auxiliar. Los endpoints y el contenido de las peticiones no cambiaron;
+  el auxiliar es el mismo en PowerShell 7.
+- **Comprobación posterior:** ejecución local (sin contenedor) con Windows
+  PowerShell 5.1, aplicando el bloque del README literalmente:
+  - registro con contraseña `Secretaña51!` → cuerpo con `"id"` y
+    «Usuario registrado.» (`201`); el archivo generado tiene 31 bytes, sin
+    BOM (primeros bytes `123,34,99`) y la `ñ` como `C3 B1`;
+  - activación leyendo el `.eml` local (el worker de la cola lo escribe
+    cada 10 s) → «La cuenta fue activada.» (`200`);
+  - login con la misma contraseña → token recibido;
+  - petición autenticada con cuerpo JSON:
+    `POST /api/solicitudes-permisos` con `{"permiso":"CrearReserva"}` y
+    `-Token $std` → «La solicitud fue creada con estado Pendiente.»
+    (`201`);
+  - el auxiliar no deja archivos temporales (`cuerpo-*.json`: 0).
+  - **Limpieza:** usuarios, sesiones, solicitudes y correos de prueba
+    eliminados (`0` en cada tabla), `.eml` de prueba borrados y API local
+    detenida.
+- **Alcance:** solo documentación; no se modificó código funcional ni se
+  repitió la suite completa.
 
 ## 13. Limitaciones y observaciones
 

@@ -277,8 +277,37 @@ nombre de proyecto distinto, por ejemplo
 
 ## Sesión, permisos y reservas (práctica 3)
 
-Los ejemplos usan PowerShell y `curl.exe`. Los cuerpos JSON deben enviarse
-en UTF-8 porque el campo de contraseña se llama `contraseña`.
+Los ejemplos usan PowerShell y `curl.exe`. Windows PowerShell 5.1 no pasa las
+comillas dobles incrustadas en un argumento a un programa nativo: con
+`-d '{"correo":"..."}'` el cuerpo llega sin comillas y la API responde `400`
+(el campo `contraseña` exige además UTF-8). Por eso cada cuerpo JSON se escribe
+en un archivo UTF-8 **sin BOM** y se envía con
+`curl.exe --data-binary "@archivo"`. Definir una vez el auxiliar:
+
+```powershell
+$base = "http://localhost:5137"
+
+# Escribe el cuerpo JSON en un archivo UTF-8 sin BOM y lo envía con
+# curl.exe --data-binary, sin que PowerShell altere las comillas.
+function Enviar-Json {
+  param(
+    [Parameter(Mandatory)] [string] $Url,
+    [Parameter(Mandatory)] [string] $Cuerpo,
+    [string] $Metodo = "POST",
+    [string] $Token
+  )
+  $ruta = Join-Path $env:TEMP ("cuerpo-" + [guid]::NewGuid().ToString("N") + ".json")
+  [IO.File]::WriteAllText($ruta, $Cuerpo, (New-Object System.Text.UTF8Encoding $false))
+  $argumentos = @("-s", "-X", $Metodo, $Url, "-H", "Content-Type: application/json",
+    "--data-binary", "@$ruta")
+  if ($Token) { $argumentos += @("-H", "Authorization: $Token") }
+  & curl.exe @argumentos
+  Remove-Item $ruta -Force
+}
+```
+
+El auxiliar funciona igual en PowerShell 7. Los ejemplos posteriores escriben
+el cuerpo JSON tal cual, con `contraseña` incluida.
 
 ### 1. Sesión de Estándar
 
@@ -286,10 +315,7 @@ Registrar la cuenta (nace inactiva) y activarla con el enlace que llega a la
 cola de correos:
 
 ```powershell
-$base = "http://localhost:5137"
-
-curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
-  -d '{"nombre":"Estandar Demo","correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}'
+Enviar-Json "$base/api/usuarios" '{"nombre":"Estandar Demo","correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}'
 
 # Último .eml del contenedor (ver «Consultar los correos .eml»).
 $nombre = (docker compose exec -T api sh -c "ls -1t /app/correo-salida | head -1").Trim()
@@ -301,9 +327,7 @@ curl.exe -s "$base/activar?token=$activacion"
 Iniciar sesión y guardar el token:
 
 ```powershell
-$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
-  -H "Content-Type: application/json" `
-  -d '{"correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
+$respuesta = Enviar-Json "$base/api/sesiones" '{"correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
 $std = "Bearer $($respuesta.token)"
 ```
 
@@ -315,9 +339,7 @@ arrancar si no existe ninguno (ver «Contenedor»), con la cuenta configurada en
 en `$adm` y comprobar el rol; no se registra, activa ni promueve nada a mano:
 
 ```powershell
-$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
-  -H "Content-Type: application/json" `
-  -d '{"correo":"admin@reservas.local","contraseña":"Admin_Local_2026!Demo"}' | ConvertFrom-Json
+$respuesta = Enviar-Json "$base/api/sesiones" '{"correo":"admin@reservas.local","contraseña":"Admin_Local_2026!Demo"}' | ConvertFrom-Json
 $adm = "Bearer $($respuesta.token)"
 
 curl.exe -s "$base/api/usuarios/yo" -H "Authorization: $adm"
@@ -331,8 +353,7 @@ Administrador**. Se registra y activa la cuenta igual que en el paso anterior,
 leyendo el `.eml` local con `Get-Content` (sin comandos Docker):
 
 ```powershell
-curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
-  -d '{"nombre":"Admin Demo","correo":"admin@itla.edu.do","contraseña":"Secreta123!"}'
+Enviar-Json "$base/api/usuarios" '{"nombre":"Admin Demo","correo":"admin@itla.edu.do","contraseña":"Secreta123!"}'
 
 $eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
   Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -358,9 +379,7 @@ Después, iniciar una **sesión nueva** con esa cuenta, guardar su token en
 `$adm` y comprobar el rol:
 
 ```powershell
-$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
-  -H "Content-Type: application/json" `
-  -d '{"correo":"admin@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
+$respuesta = Enviar-Json "$base/api/sesiones" '{"correo":"admin@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
 $adm = "Bearer $($respuesta.token)"
 
 curl.exe -s "$base/api/usuarios/yo" -H "Authorization: $adm"
@@ -378,9 +397,7 @@ nace `Pendiente` y la resuelve un Administrador:
 
 ```powershell
 # 201: {"id":"...","permiso":"CrearReserva","estado":"Pendiente",...}
-curl.exe -s -X POST "$base/api/solicitudes-permisos" `
-  -H "Authorization: $std" -H "Content-Type: application/json" `
-  -d '{"permiso":"CrearReserva"}'
+Enviar-Json "$base/api/solicitudes-permisos" '{"permiso":"CrearReserva"}' -Token $std
 
 # 200: la solicitud queda Aplicada y el permiso se concede
 curl.exe -s -X PUT "$base/api/solicitudes-permisos/<id-solicitud>/aprobar" `
@@ -394,9 +411,7 @@ no inserta nada. Aprobar dos veces la misma solicitud responde 409.
 
 ```powershell
 # 201: reserva creada en estado Solicitada
-curl.exe -s -X POST "$base/api/reservas" `
-  -H "Authorization: $std" -H "Content-Type: application/json" `
-  -d '{"espacio":"SALON A","fecha":"2027-01-15T00:00:00","horaInicio":"10:00:00","horaFin":"12:00:00"}'
+Enviar-Json "$base/api/reservas" '{"espacio":"SALON A","fecha":"2027-01-15T00:00:00","horaInicio":"10:00:00","horaFin":"12:00:00"}' -Token $std
 
 # 200: solo las reservas del usuario de la sesión
 curl.exe -s "$base/api/reservas/mias" -H "Authorization: $std"
