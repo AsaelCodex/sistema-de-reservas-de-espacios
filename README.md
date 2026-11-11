@@ -241,9 +241,25 @@ docker compose exec api ls /app/correo-salida
 docker compose exec api cat /app/correo-salida/<archivo>.eml
 ```
 
-El enlace de activación o el código de recuperación de cada correo se leen de
-ese archivo. También se puede consultar la cola con `GET /api/correos` usando
-una sesión de Administrador.
+Para leer el correo más reciente desde PowerShell y extraer su enlace o
+código (este es el bloque que usan los pasos de sesión, permisos y
+recuperación):
+
+```powershell
+$nombre = (docker compose exec -T api sh -c "ls -1t /app/correo-salida | head -1").Trim()
+$eml = (docker compose exec -T api sh -c "cat /app/correo-salida/$nombre") -join "`n"
+
+# Enlace de activación
+$activacion = [regex]::Match($eml, 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
+
+# Código de recuperación (6 dígitos)
+$codigo = [regex]::Match($eml, '\b\d{6}\b').Value
+```
+
+Con `dotnet run` (sin contenedor) el mismo correo está en
+`SistemaDeReservas/SistemaDeReservas.API/correo-salida/`; en ese caso se lee
+con `Get-Content -Raw` sobre el `.eml` más reciente. También se puede
+consultar la cola con `GET /api/correos` usando una sesión de Administrador.
 
 ### Registros y parada
 
@@ -273,9 +289,10 @@ $base = "http://localhost:5137"
 curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
   -d '{"nombre":"Estandar Demo","correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}'
 
-$eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9]+)').Groups[1].Value
+# Último .eml del contenedor (ver «Consultar los correos .eml»).
+$nombre = (docker compose exec -T api sh -c "ls -1t /app/correo-salida | head -1").Trim()
+$eml = (docker compose exec -T api sh -c "cat /app/correo-salida/$nombre") -join "`n"
+$activacion = [regex]::Match($eml, 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
 curl.exe -s "$base/activar?token=$activacion"
 ```
 
@@ -303,9 +320,10 @@ administrador igual que en el paso anterior:
 curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
   -d '{"nombre":"Admin Demo","correo":"admin@itla.edu.do","contraseña":"Secreta123!"}'
 
-$eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9]+)').Groups[1].Value
+# Último .eml del contenedor (ver «Consultar los correos .eml»).
+$nombre = (docker compose exec -T api sh -c "ls -1t /app/correo-salida | head -1").Trim()
+$eml = (docker compose exec -T api sh -c "cat /app/correo-salida/$nombre") -join "`n"
+$activacion = [regex]::Match($eml, 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
 curl.exe -s "$base/activar?token=$activacion"
 ```
 
@@ -667,8 +685,9 @@ servidor de correo.
 Comprobar el funcionamiento:
 
 1. Registrar un usuario nuevo (`POST /api/usuarios`).
-2. Verificar que aparece el archivo en `correo-salida/` (o, con SMTP
-   configurado, el correo recibido), dentro de los ~10 segundos.
+2. Verificar que aparece el archivo en el volumen (`/app/correo-salida`
+   en el contenedor, `correo-salida/` con `dotnet run`; ver «Consultar los
+   correos `.eml`»), dentro de los ~10 segundos.
 3. Consultar `GET /api/correos` como Administrador: el correo aparece
    con estado `Enviado`, `FechaEnvio` y `Intentos = 0`.
 
