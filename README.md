@@ -50,7 +50,9 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
   los cinco requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-05).
   La evaluación climática de reservas (P4-03) también está implementada y
   verificada, con evidencia para RD-06, RD-07, RD-08, RD-09 y RD-12.
-  El detalle y la evidencia están en `docs/matriz-requisitos.md`.
+  El detalle y la evidencia están en `docs/matriz-requisitos.md`. La
+  comprobación final desde un clon limpio (P4-04) está en
+  `docs/practica-4-cierre.md`.
 - **Pruebas:** 659 casos en verde (401 métodos de prueba, las teorías se
   expanden): 640 casos sin LocalDB —negocio con fakes, seguridad, correo,
   documentos, evaluación climática, controladores invocados en memoria,

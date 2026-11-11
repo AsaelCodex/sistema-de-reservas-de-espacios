@@ -96,6 +96,20 @@ La verificación real (con clave, en un proyecto Compose aislado) y los
 ejemplos de respuesta están en `docs/api-externa.md` y en la sección «API
 externa» de `README.md`.
 
+## Cierre de la práctica 4 (P4-04)
+
+La comprobación final se ejecutó desde un clon limpio del SHA
+`2598e99788f46c90b94b84448ca3e477a523ecd0`, con un proyecto Compose
+aislado y volúmenes nuevos. Resultado: **PASS (8.0 / 8.0)**. Se
+verificaron documentos y eliminación lógica, persistencia tras
+`docker compose down` sin `-v`, API externa (clave ficticia, clave real,
+sin clave y proveedor inaccesible), los seis frentes de la revisión
+acumulada, los límites de Kestrel, los secretos y la suite completa
+(659/659 en modo estricto). Los defectos D-01 (ruta de correos del README
+en el flujo con contenedor) y D-02 (RD-01 a RD-05 marcados como
+pendientes) quedaron corregidos. El informe está en
+`docs/practica-4-cierre.md`.
+
 ## Módulo de negocio — Reservas de espacios
 
 | ID        | Requisito                                         | Etapa    | Estado    | Evidencia |
