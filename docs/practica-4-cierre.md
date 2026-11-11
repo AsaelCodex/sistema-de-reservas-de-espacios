@@ -380,6 +380,59 @@ No se encontraron otros defectos que impidieran cumplir los requisitos.
   pruebas de transiciones y hashing. No cambió código ni configuración.
 - **Alcance:** solo documentación.
 
+### D-03 — README: «Sesión de Administrador» mezclaba los dos flujos
+
+- **Requisito afectado:** revisión acumulada de Control de Acceso y
+  Gestión de Permisos; el evaluador sigue el README al pie de la letra.
+- **Descripción:** la sección «Sesión de Administrador» no distinguía los
+  dos entornos. El bloque del contenedor mandaba registrar una segunda
+  cuenta, activarla y promoverla con SQL, pasos que solo tienen sentido
+  sin administrador inicial; el bloque local, en cambio, leía el `.eml`
+  con `docker compose exec`, un comando que no existe en una ejecución
+  local. Además, el bloque del contenedor no mostraba el inicio de sesión
+  del administrador inicial que crea el arranque a partir de `.env.example`.
+- **Corrección:** la sección quedó dividida en dos bloques explícitos.
+  1. **Con el contenedor:** inicio de sesión con la cuenta de
+     `.env.example` (`admin@reservas.local`), token guardado en `$adm` y
+     comprobación de `GET /api/usuarios/yo` con rol Administrador; sin
+     registro, activación ni promoción manual.
+  2. **Ejecución local sin administrador inicial:** registro con
+     `POST /api/usuarios` (nace Estándar inactivo), lectura del `.eml` en
+     `SistemaDeReservas/SistemaDeReservas.API/correo-salida/` con
+     `Get-Content`, activación, promoción puntual con `sqlcmd`
+     (`UPDATE … WHERE Correo = …` y `@@ROWCOUNT = 1`) y sesión nueva con
+     `$adm`; sin comandos Docker.
+- **Comprobación posterior:** ambos bloques se ejecutaron en su entorno
+  correspondiente, sobre un clon del commit de la corrección
+  (`0c85e40`), con `.env` copiado de `.env.example` y proyecto Compose
+  aislado `p4-d03`.
+  - **Contenedor:** login `201` con token, `GET /api/usuarios/yo` → `200`
+    «Administrador Inicial», rol `Administrador`, y `GET /api/usuarios`
+    con una sola cuenta: el administrador creado por el arranque. No se
+    registró, activó ni promovió nada a mano.
+  - **Local:** el arranque registró «Administrador inicial deshabilitado
+    por configuración»; registro `201`, `.eml` en la ruta documentada
+    (asunto «Activa tu cuenta»), token de 64 caracteres extraído con
+    `Get-Content`, activación `200`, promoción `sqlcmd` con
+    «(1 filas afectadas)» y salida `0` (`Rol = 0`), y sesión nueva con
+    `GET /api/usuarios/yo` → `200` «Admin Demo», rol `Administrador`. Sin
+    comandos Docker.
+  - **Nota de entorno:** el Windows PowerShell 5.1 de este equipo consume
+    las comillas dobles incrustadas al pasar un argumento a un ejecutable
+    nativo, de modo que `-d '{"correo": …}'` llega como `{correo: …}` y el
+    servidor responde `400`. Para la comprobación se envió el mismo JSON
+    con comillas escapadas (`\"`) cuando no contenía espacios y desde un
+    archivo UTF-8 cuando sí los contenía (registro con `"nombre"`).
+    El cuerpo y los endpoints son los del README; el resto de comandos se
+    ejecutó literalmente. El texto del README no se modificó por esto.
+  - **Limpieza:** `docker compose -p p4-d03 down -v`, clon temporal
+    eliminado y filas locales creadas eliminadas (`Usuarios`,
+    `Sesiones` y `CorreosEnCola` quedaron en `0`). Las migraciones
+    pendientes se aplicaron por el propio arranque, como en el flujo
+    documentado.
+- **Alcance:** solo documentación; no cambió código ni configuración, por
+  lo que no fue necesario repetir los escenarios funcionales.
+
 ## 13. Limitaciones y observaciones
 
 - La verificación se hizo con LocalDB disponible; no aplica la limitación
