@@ -50,7 +50,9 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
   los cinco requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-05).
   La evaluación climática de reservas (P4-03) también está implementada y
   verificada, con evidencia para RD-06, RD-07, RD-08, RD-09 y RD-12.
-  El detalle y la evidencia están en `docs/matriz-requisitos.md`.
+  El detalle y la evidencia están en `docs/matriz-requisitos.md`. La
+  comprobación final desde un clon limpio (P4-04) está en
+  `docs/practica-4-cierre.md`.
 - **Pruebas:** 659 casos en verde (401 métodos de prueba, las teorías se
   expanden): 640 casos sin LocalDB —negocio con fakes, seguridad, correo,
   documentos, evaluación climática, controladores invocados en memoria,
@@ -241,9 +243,25 @@ docker compose exec api ls /app/correo-salida
 docker compose exec api cat /app/correo-salida/<archivo>.eml
 ```
 
-El enlace de activación o el código de recuperación de cada correo se leen de
-ese archivo. También se puede consultar la cola con `GET /api/correos` usando
-una sesión de Administrador.
+Para leer el correo más reciente desde PowerShell y extraer su enlace o
+código (este es el bloque que usan los pasos de sesión, permisos y
+recuperación):
+
+```powershell
+$nombre = (docker compose exec -T api sh -c "ls -1t /app/correo-salida | head -1").Trim()
+$eml = (docker compose exec -T api sh -c "cat /app/correo-salida/$nombre") -join "`n"
+
+# Enlace de activación
+$activacion = [regex]::Match($eml, 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
+
+# Código de recuperación (6 dígitos)
+$codigo = [regex]::Match($eml, '\b\d{6}\b').Value
+```
+
+Con `dotnet run` (sin contenedor) el mismo correo está en
+`SistemaDeReservas/SistemaDeReservas.API/correo-salida/`; en ese caso se lee
+con `Get-Content -Raw` sobre el `.eml` más reciente. También se puede
+consultar la cola con `GET /api/correos` usando una sesión de Administrador.
 
 ### Registros y parada
 
@@ -259,8 +277,37 @@ nombre de proyecto distinto, por ejemplo
 
 ## Sesión, permisos y reservas (práctica 3)
 
-Los ejemplos usan PowerShell y `curl.exe`. Los cuerpos JSON deben enviarse
-en UTF-8 porque el campo de contraseña se llama `contraseña`.
+Los ejemplos usan PowerShell y `curl.exe`. Windows PowerShell 5.1 no pasa las
+comillas dobles incrustadas en un argumento a un programa nativo: con
+`-d '{"correo":"..."}'` el cuerpo llega sin comillas y la API responde `400`
+(el campo `contraseña` exige además UTF-8). Por eso cada cuerpo JSON se escribe
+en un archivo UTF-8 **sin BOM** y se envía con
+`curl.exe --data-binary "@archivo"`. Definir una vez el auxiliar:
+
+```powershell
+$base = "http://localhost:5137"
+
+# Escribe el cuerpo JSON en un archivo UTF-8 sin BOM y lo envía con
+# curl.exe --data-binary, sin que PowerShell altere las comillas.
+function Enviar-Json {
+  param(
+    [Parameter(Mandatory)] [string] $Url,
+    [Parameter(Mandatory)] [string] $Cuerpo,
+    [string] $Metodo = "POST",
+    [string] $Token
+  )
+  $ruta = Join-Path $env:TEMP ("cuerpo-" + [guid]::NewGuid().ToString("N") + ".json")
+  [IO.File]::WriteAllText($ruta, $Cuerpo, (New-Object System.Text.UTF8Encoding $false))
+  $argumentos = @("-s", "-X", $Metodo, $Url, "-H", "Content-Type: application/json",
+    "--data-binary", "@$ruta")
+  if ($Token) { $argumentos += @("-H", "Authorization: $Token") }
+  & curl.exe @argumentos
+  Remove-Item $ruta -Force
+}
+```
+
+El auxiliar funciona igual en PowerShell 7. Los ejemplos posteriores escriben
+el cuerpo JSON tal cual, con `contraseña` incluida.
 
 ### 1. Sesión de Estándar
 
@@ -268,44 +315,49 @@ Registrar la cuenta (nace inactiva) y activarla con el enlace que llega a la
 cola de correos:
 
 ```powershell
-$base = "http://localhost:5137"
+Enviar-Json "$base/api/usuarios" '{"nombre":"Estandar Demo","correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}'
 
-curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
-  -d '{"nombre":"Estandar Demo","correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}'
-
-$eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9]+)').Groups[1].Value
+# Último .eml del contenedor (ver «Consultar los correos .eml»).
+$nombre = (docker compose exec -T api sh -c "ls -1t /app/correo-salida | head -1").Trim()
+$eml = (docker compose exec -T api sh -c "cat /app/correo-salida/$nombre") -join "`n"
+$activacion = [regex]::Match($eml, 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
 curl.exe -s "$base/activar?token=$activacion"
 ```
 
 Iniciar sesión y guardar el token:
 
 ```powershell
-$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
-  -H "Content-Type: application/json" `
-  -d '{"correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
+$respuesta = Enviar-Json "$base/api/sesiones" '{"correo":"estandar@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
 $std = "Bearer $($respuesta.token)"
 ```
 
 ### 2. Sesión de Administrador
 
-En el flujo con contenedor, el administrador inicial se crea
-automáticamente si no existe ninguno (ver «Contenedor» y la cuenta de
-`.env.example`); en ese caso se omite este procedimiento manual.
-
-Para una ejecución local sin `AdministradorInicial__Habilitado`, el registro
-(`POST /api/usuarios`) siempre crea un Estándar inactivo y **no existe otro
-endpoint para el primer Administrador**. Se registra y activa la cuenta del
-administrador igual que en el paso anterior:
+**Con el contenedor:** el administrador inicial se crea automáticamente al
+arrancar si no existe ninguno (ver «Contenedor»), con la cuenta configurada en
+`.env.example`. Solo hay que iniciar sesión con esa cuenta, guardar el token
+en `$adm` y comprobar el rol; no se registra, activa ni promueve nada a mano:
 
 ```powershell
-curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
-  -d '{"nombre":"Admin Demo","correo":"admin@itla.edu.do","contraseña":"Secreta123!"}'
+$respuesta = Enviar-Json "$base/api/sesiones" '{"correo":"admin@reservas.local","contraseña":"Admin_Local_2026!Demo"}' | ConvertFrom-Json
+$adm = "Bearer $($respuesta.token)"
+
+curl.exe -s "$base/api/usuarios/yo" -H "Authorization: $adm"
+# 200: {"id":"...","nombre":"Administrador Inicial","correo":"admin@reservas.local","rol":"Administrador"}
+```
+
+**Ejecución local sin administrador inicial** (sin
+`AdministradorInicial__Habilitado`): el registro (`POST /api/usuarios`) siempre
+crea un Estándar inactivo y **no existe otro endpoint para el primer
+Administrador**. Se registra y activa la cuenta igual que en el paso anterior,
+leyendo el `.eml` local con `Get-Content` (sin comandos Docker):
+
+```powershell
+Enviar-Json "$base/api/usuarios" '{"nombre":"Admin Demo","correo":"admin@itla.edu.do","contraseña":"Secreta123!"}'
 
 $eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
   Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9]+)').Groups[1].Value
+$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
 curl.exe -s "$base/activar?token=$activacion"
 ```
 
@@ -327,9 +379,7 @@ Después, iniciar una **sesión nueva** con esa cuenta, guardar su token en
 `$adm` y comprobar el rol:
 
 ```powershell
-$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
-  -H "Content-Type: application/json" `
-  -d '{"correo":"admin@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
+$respuesta = Enviar-Json "$base/api/sesiones" '{"correo":"admin@itla.edu.do","contraseña":"Secreta123!"}' | ConvertFrom-Json
 $adm = "Bearer $($respuesta.token)"
 
 curl.exe -s "$base/api/usuarios/yo" -H "Authorization: $adm"
@@ -347,9 +397,7 @@ nace `Pendiente` y la resuelve un Administrador:
 
 ```powershell
 # 201: {"id":"...","permiso":"CrearReserva","estado":"Pendiente",...}
-curl.exe -s -X POST "$base/api/solicitudes-permisos" `
-  -H "Authorization: $std" -H "Content-Type: application/json" `
-  -d '{"permiso":"CrearReserva"}'
+Enviar-Json "$base/api/solicitudes-permisos" '{"permiso":"CrearReserva"}' -Token $std
 
 # 200: la solicitud queda Aplicada y el permiso se concede
 curl.exe -s -X PUT "$base/api/solicitudes-permisos/<id-solicitud>/aprobar" `
@@ -363,9 +411,7 @@ no inserta nada. Aprobar dos veces la misma solicitud responde 409.
 
 ```powershell
 # 201: reserva creada en estado Solicitada
-curl.exe -s -X POST "$base/api/reservas" `
-  -H "Authorization: $std" -H "Content-Type: application/json" `
-  -d '{"espacio":"SALON A","fecha":"2027-01-15T00:00:00","horaInicio":"10:00:00","horaFin":"12:00:00"}'
+Enviar-Json "$base/api/reservas" '{"espacio":"SALON A","fecha":"2027-01-15T00:00:00","horaInicio":"10:00:00","horaFin":"12:00:00"}' -Token $std
 
 # 200: solo las reservas del usuario de la sesión
 curl.exe -s "$base/api/reservas/mias" -H "Authorization: $std"
@@ -667,8 +713,9 @@ servidor de correo.
 Comprobar el funcionamiento:
 
 1. Registrar un usuario nuevo (`POST /api/usuarios`).
-2. Verificar que aparece el archivo en `correo-salida/` (o, con SMTP
-   configurado, el correo recibido), dentro de los ~10 segundos.
+2. Verificar que aparece el archivo en el volumen (`/app/correo-salida`
+   en el contenedor, `correo-salida/` con `dotnet run`; ver «Consultar los
+   correos `.eml`»), dentro de los ~10 segundos.
 3. Consultar `GET /api/correos` como Administrador: el correo aparece
    con estado `Enviado`, `FechaEnvio` y `Intentos = 0`.
 

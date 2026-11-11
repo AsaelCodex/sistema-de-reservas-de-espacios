@@ -451,3 +451,40 @@ horario salen de la reserva persistida; nunca del cliente.
   otro Estándar, reserva inexistente y clave ausente.
 - No se llama a la API real en las pruebas automatizadas.
 - La documentación de la pieza está en `docs/api-externa.md`.
+
+## 18. Cierre de la práctica 4 (P4-04)
+
+La comprobación final se ejecutó desde un clon limpio del SHA
+`2598e99788f46c90b94b84448ca3e477a523ecd0`, con un proyecto Compose
+aislado (`p4-cierre-eval`) y volúmenes nuevos; al terminar se eliminó con
+`down -v` sin tocar los del usuario.
+
+- Documentos: metadatos y propietario desde la sesión, listados por rol,
+  descarga/eliminación por propietario y Administrador, rechazo a otro
+  Estándar, rechazo sin sesión, eliminación lógica con fila y archivo
+  conservados, y hash del contenido idéntico.
+- Persistencia: `docker compose down` sin `-v` y nuevo arranque; sesión
+  nueva, documento descargado con el mismo hash, eliminados aún
+  eliminados y administrador inicial sin duplicar ni modificar.
+- API externa: clave ficticia `503`, clave real `200` coherente con horas,
+  máximo y umbral, sin clave `503` con arranque correcto y proveedor
+  inaccesible `504` acotado, sin afectar login, reservas ni documentos.
+- Seis frentes: registro/activación, sesión/cierre, rechazo de operación
+  administrativa a un Estándar, recuperación de contraseña con
+  invalidación de credenciales y sesiones, permisos con transiciones
+  prohibidas y reservas con transición prohibida.
+- Límites: archivo exacto en el máximo `201`, archivo por encima `413`
+  controlado y cuerpo total por encima del máximo `400` controlado.
+- Secretos: `.env` fuera del árbol y del historial (69 ramas, 14
+  etiquetas); clave real con 0 coincidencias; credenciales locales
+  iguales a los valores ficticios de `.env.example`; imagen sin `.env` ni
+  clave.
+- Suite: restauración y compilación correctas; 659 correctas, 0 fallidas
+  y 0 omitidas con `REQUIERE_PERSISTENCIA=1`. Se registran las
+  advertencias NU1902/NU1903 (paquete `System.Security.Cryptography.Pkcs`
+  9.0.11) y CS8524 (switches no exhaustivos) sin declararlas inocuas.
+
+Defectos corregidos (solo documentación): D-01, el README leía los
+correos `.eml` desde una ruta del host inexistente en el flujo con
+contenedor; D-02, RD-01 a RD-05 figuraban como pendientes en la matriz.
+El informe completo está en `docs/practica-4-cierre.md`.
