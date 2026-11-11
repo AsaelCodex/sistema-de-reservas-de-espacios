@@ -309,23 +309,34 @@ $std = "Bearer $($respuesta.token)"
 
 ### 2. Sesión de Administrador
 
-En el flujo con contenedor, el administrador inicial se crea
-automáticamente si no existe ninguno (ver «Contenedor» y la cuenta de
-`.env.example`); en ese caso se omite este procedimiento manual.
+**Con el contenedor:** el administrador inicial se crea automáticamente al
+arrancar si no existe ninguno (ver «Contenedor»), con la cuenta configurada en
+`.env.example`. Solo hay que iniciar sesión con esa cuenta, guardar el token
+en `$adm` y comprobar el rol; no se registra, activa ni promueve nada a mano:
 
-Para una ejecución local sin `AdministradorInicial__Habilitado`, el registro
-(`POST /api/usuarios`) siempre crea un Estándar inactivo y **no existe otro
-endpoint para el primer Administrador**. Se registra y activa la cuenta del
-administrador igual que en el paso anterior:
+```powershell
+$respuesta = curl.exe -s -X POST "$base/api/sesiones" `
+  -H "Content-Type: application/json" `
+  -d '{"correo":"admin@reservas.local","contraseña":"Admin_Local_2026!Demo"}' | ConvertFrom-Json
+$adm = "Bearer $($respuesta.token)"
+
+curl.exe -s "$base/api/usuarios/yo" -H "Authorization: $adm"
+# 200: {"id":"...","nombre":"Administrador Inicial","correo":"admin@reservas.local","rol":"Administrador"}
+```
+
+**Ejecución local sin administrador inicial** (sin
+`AdministradorInicial__Habilitado`): el registro (`POST /api/usuarios`) siempre
+crea un Estándar inactivo y **no existe otro endpoint para el primer
+Administrador**. Se registra y activa la cuenta igual que en el paso anterior,
+leyendo el `.eml` local con `Get-Content` (sin comandos Docker):
 
 ```powershell
 curl.exe -s -X POST "$base/api/usuarios" -H "Content-Type: application/json" `
   -d '{"nombre":"Admin Demo","correo":"admin@itla.edu.do","contraseña":"Secreta123!"}'
 
-# Último .eml del contenedor (ver «Consultar los correos .eml»).
-$nombre = (docker compose exec -T api sh -c "ls -1t /app/correo-salida | head -1").Trim()
-$eml = (docker compose exec -T api sh -c "cat /app/correo-salida/$nombre") -join "`n"
-$activacion = [regex]::Match($eml, 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
+$eml = Get-ChildItem SistemaDeReservas/SistemaDeReservas.API/correo-salida/*.eml |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$activacion = [regex]::Match((Get-Content -Raw $eml), 'activar\?token=([A-Za-z0-9_\-]+)').Groups[1].Value
 curl.exe -s "$base/activar?token=$activacion"
 ```
 
