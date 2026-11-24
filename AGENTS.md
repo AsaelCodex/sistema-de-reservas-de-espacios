@@ -233,13 +233,19 @@ instalados en el host.
 
 ### Fechas y horas (RD-11)
 
-- Se persiste y compara en **UTC** con `DateTime.UtcNow`.
+- Los **instantes** (`CreadaEn`, `ResueltaEn`, `FechaCreacion`, `FechaEnvio`,
+  `LeidaEn`) se persisten en **UTC** con `DateTime.UtcNow` y se comparan como
+  instantes.
 - Cada operación captura una sola marca de tiempo y la reutiliza en todos los
   registros que produce.
+- `Reserva.Fecha` es una **fecha de calendario**, no un instante: se normaliza
+  con `.Date`, se compara como fecha y **no se convierte entre zonas
+  horarias**. `HoraInicio`/`HoraFin` son horas del mismo día.
+- En reportes, `desde`/`hasta` son fechas inclusivas. Para instantes se usa
+  `valor >= desde 00:00Z` y `valor < (hasta + 1 día) 00:00Z`; para
+  `Reserva.Fecha` se usa `Fecha >= desde` y `Fecha <= hasta`, sin sumar días
+  ni convertir zonas.
 - `DateTime?` para fechas opcionales; `TimeSpan` para horarios del día.
-- `Reserva.Fecha` se normaliza con `.Date`; `HoraInicio`/`HoraFin` son horas
-  del mismo día.
-- Los filtros de reportes por fecha usan límites UTC explícitos y consistentes.
 - No usar `DateTime.Now` ni horas locales en la persistencia.
 
 ### Persistencia y migraciones
@@ -377,6 +383,13 @@ Mientras se trabaja en la Práctica 5:
   `Enviado`, `Fallido`), intentos, fechas y último error.
 - `ProcesadorColaCorreos.LimiteIntentos = 3` y
   `ProcesadorColaCorreos.TamanoLote = 20`.
+- `Intentos` cuenta **fallos**: solo se incrementa cuando el envío lanza. Al
+  tercer fallo el correo queda `Fallido`; como el procesador solo consulta
+  `Pendiente`, no se reintenta una cuarta vez. Un envío exitoso conserva el
+  número de fallos previos y limpia `UltimoError`.
+- La no duplicación de RF-NOT-12 se garantiza para ejecuciones **secuenciales**
+  del procesador; no cubre dos workers concurrentes ni una caída después del
+  envío y antes de persistir `Enviado`.
 - `ColaCorreosWorker` procesa cada `Correo:IntervaloSegundos` (10 s por
   defecto; 5 s en Docker Compose).
 - `GET /api/correos` es solo para Administrador y devuelve hasta 200 correos.

@@ -65,7 +65,8 @@ salvo que el escenario indique lo contrario.
 
 ### 2.2 Solicitudes de permiso para el reporte del Core
 
-Todas las fechas son UTC.
+Todos los `CreadaEn` son **instantes UTC** generados con `DateTime.UtcNow`; se
+comparan como instantes, no como fechas de calendario.
 
 | Id | Solicitante | Permiso | Estado actual | `CreadaEn` |
 |---|---|---|---|---|
@@ -86,7 +87,9 @@ Notas:
 
 ### 2.3 Reservas para el reporte del negocio
 
-Todas las fechas son UTC y `Fecha` se guarda normalizada con `.Date`.
+`Fecha` es una **fecha de calendario**, no un instante: se guarda normalizada
+con `.Date` y no se convierte entre zonas horarias. `HoraInicio` y `HoraFin`
+son horas del mismo día.
 
 | Id | Propietario | Espacio | `Fecha` | `HoraInicio` | `HoraFin` | Estado | Duración |
 |---|---|---|---|---|---|---|---|
@@ -105,18 +108,38 @@ Notas:
 - R5, R6 y R7 existen para comprobar que los demás estados no se agregan.
 - R8 prueba el límite superior de marzo.
 
-### 2.4 Rangos de fechas
+### 2.4 Instantes UTC y fechas de calendario
 
-- Parámetros: `desde` y `hasta`, ambos obligatorios, con formato
-  `yyyy-MM-dd`, interpretados como fechas UTC.
-- Rango inclusivo en ambos extremos.
-- Para el reporte del Core se filtra por `SolicitudPermiso.CreadaEn`:
-  `CreadaEn >= desde 00:00:00Z` y `CreadaEn < hasta + 1 día`.
-- Para el reporte del negocio se filtra por `Reserva.Fecha`:
-  `Fecha >= desde` y `Fecha <= hasta`.
+- **Instantes:** `SolicitudPermiso.CreadaEn`, `SolicitudPermiso.ResueltaEn`,
+  `Notificacion.CreadaEn`, `Notificacion.LeidaEn`,
+  `CorreoEnCola.FechaCreacion` y `CorreoEnCola.FechaEnvio` son marcas de
+  tiempo UTC (`DateTime.UtcNow`). Se comparan como instantes.
+- **Fecha de calendario:** `Reserva.Fecha` es el día reservado, se normaliza
+  con `.Date` y **no se convierte entre zonas horarias**. El 2 de marzo es el
+  2 de marzo, sin importar la zona del servidor o del usuario.
+- Los parámetros `desde` y `hasta` son fechas de calendario (`yyyy-MM-dd`); la
+  forma de convertirlas en límites depende del tipo de dato filtrado
+  (sección 2.5).
+- No se usa `DateTime.Now` ni horas locales en la persistencia.
+
+### 2.5 Semántica de los rangos `desde`/`hasta`
+
+- Parámetros obligatorios, formato `yyyy-MM-dd`; no se aceptan horas.
+- Ambos extremos son inclusivos: el día `desde` y el día `hasta` forman parte
+  del rango.
+- **Para instantes UTC** (reporte del Core, filtrado por `CreadaEn`) el rango
+  se traduce a `[desde 00:00:00Z, hasta + 1 día 00:00:00Z)`: `CreadaEn >=
+  desde 00:00:00Z` (inclusive) y `CreadaEn < (hasta + 1 día) 00:00:00Z`
+  (exclusivo). Así `2026-03-31T23:59:59Z` entra en marzo y
+  `2026-04-01T00:00:00Z` no.
+- **Para fechas de calendario** (reporte del negocio, filtrado por
+  `Reserva.Fecha`) se compara directamente `Fecha >= desde` y
+  `Fecha <= hasta`, sin sumar ni restar días y sin conversión de zona.
 - `hasta < desde` → `400`.
-- Rango mayor a 366 días → `400`.
 - Parámetro ausente, vacío, con formato inválido o con hora → `400`.
+- No se impone un máximo arbitrario de días al rango: el requisito oficial
+  (RF-REP-05) no lo exige. El costo de la consulta se controla con los
+  índices de las columnas filtradas.
 - Un rango válido sin registros → `200` con `grupos: []` y totales en cero;
   no es `404` ni un error.
 - No hay valores por defecto silenciosos: si falta un parámetro, se rechaza.
@@ -274,8 +297,12 @@ mediante `PUT /api/solicitudes-permisos/{id}/rechazar`.
 - La solicitud queda `Rechazada` y no se otorga el permiso.
 - `ana` recibe exactamente una notificación nueva de tipo
   `SolicitudPermisoRechazada`.
-- El mensaje de la notificación y el cuerpo del correo contienen el motivo
-  escrito, sin alterarlo ni omitirlo.
+- El mensaje de la notificación y el cuerpo del correo contienen exactamente
+  el motivo que quedó persistido en `SolicitudPermiso.MotivoRechazo`. El
+  servicio actual aplica `motivo.Trim()` antes de guardarlo; por tanto, si la
+  entrada trae espacios externos, la notificación y el correo muestran el
+  motivo recortado, igual que la solicitud. No se vuelve a recortar ni se
+  transforma de otra forma.
 - No se notifica a otros usuarios.
 
 **Comprobación**
@@ -529,8 +556,19 @@ automático o por una ejecución manual/independiente.
 
 **Requisito oficial:** un correo que falla se reintenta un número limitado de
 veces y luego queda marcado como fallido; no se reintenta indefinidamente ni
-desaparece sin dejar rastro. El máximo de intentos debe estar declarado en el
+desaparece sin dejar rastro. El máximo de fallos debe estar declarado en el
 README.
+
+**Comportamiento actual de `Intentos` (verificado en
+`ProcesadorColaCorreos`):** `Intentos` cuenta **fallos**, no intentos totales.
+Se incrementa únicamente en el bloque `catch`; un envío exitoso no lo
+incrementa, de modo que un correo encolado y enviado al primer intento
+conserva `Intentos = 0`. Con `LimiteIntentos = 3`, el tercer fallo deja
+`Estado = Fallido` y conserva `UltimoError`. `ObtenerPendientesAsync` solo
+devuelve correos `Pendiente`, así que un correo `Fallido` no vuelve a
+procesarse: no hay un cuarto reintento ni un cambio de estado adicional. La
+implementación debe conservar esta semántica; el README explicará que el
+límite es de 3 fallos.
 
 **Dado** un correo `Pendiente` y un envío que siempre falla.
 
@@ -556,7 +594,7 @@ README.
 - `ProcesadorColaCorreosTests` con un `IEnvioCorreo` que falla y otro que
   responde.
 - Verificar que `ProcesadorColaCorreos.LimiteIntentos` es 3 y que el README
-  declara ese máximo.
+  declara ese máximo de fallos.
 - Manual: provocar el fallo según el README y consultar la cola tras cada
   ejecución.
 
@@ -615,9 +653,12 @@ procesador de la cola dos veces seguidas no duplica ningún envío.
   repositorio.
 - Manual: ejecutar el procesador dos veces y comprobar un solo `.eml` o un
   solo envío.
-- La garantía exigida es secuencial. La concurrencia de dos workers
-  simultáneos no forma parte de RF-NOT-12 y se documenta como limitación
-  (D-NOT-12).
+- **Alcance de la garantía:** lo anterior se comprueba con ejecuciones
+  **secuenciales** del procesador sobre el mismo repositorio. No se presenta
+  como garantía frente a dos workers concurrentes ni frente a una caída del
+  proceso después de que el SMTP aceptó el envío y antes de persistir
+  `Enviado`. Esos escenarios pueden producir un envío duplicado y quedan
+  fuera de RF-NOT-12 (D-NOT-12).
 
 ### RF-NOT-13 — Credenciales SMTP solo por variables de entorno
 
@@ -653,6 +694,29 @@ variables de entorno; no aparecen en el repositorio ni en el historial
 - Revisión de `git log -p` y búsqueda de patrones de credenciales **sin
   imprimir valores reales**; el resultado esperado es cero coincidencias.
 - No leer `.env` para esta comprobación; usar `.env.example`.
+
+### Criterio transversal — consistencia entre estado y entrega
+
+No tiene un RF propio: concreta cómo se comprueban RF-NOT-01 a RF-NOT-06 y
+sirve de criterio de consistencia para toda operación que notifica.
+
+1. **Operación rechazada = cero efectos de entrega.** Si una operación de
+   negocio termina en rechazo (`400`, `403`, `409` o el código que
+   corresponda), no crea notificaciones ni correos nuevos, no modifica
+   notificaciones existentes y no cambia el estado de la entidad. Repetir la
+   operación rechazada sigue sin generar entregas.
+2. **Operación exitosa = entrega completa o ninguna.** Si una operación
+   termina en éxito y el canal de correo del destinatario está habilitado,
+   persiste en la misma unidad de trabajo el cambio de estado, la
+   notificación interna y el correo `Pendiente` correspondiente. Si el canal
+   está deshabilitado, persiste el cambio de estado y la notificación interna,
+   y no encola correo. No se admite éxito con notificación sin cambio de
+   estado, ni cambio de estado sin notificación cuando la operación debía
+   notificar.
+3. **Comprobación:** en las pruebas de servicio se verifica el estado final y
+   los conteos de notificaciones y correos para el caso exitoso y para el
+   rechazado; en las pruebas de API se verifica el código HTTP y se consulta
+   la bandeja y la cola después de la operación.
 
 ---
 
@@ -830,11 +894,15 @@ dos rangos distintos producen resultados distintos sobre los mismos datos.
 - Negocio, `ana`: marzo `SALÓN A` 2/3.5/1.75; abril `CANCHA 1` 1/2.0/2.0.
 - Los límites son inclusivos: S6 (`2026-03-31T23:59:59Z`) entra en marzo;
   S7 (`2026-04-01T00:00:00Z`) no. R8 (`2026-03-31`) entra en marzo.
+- El reporte del Core aplica a `CreadaEn` el intervalo semiabierto
+  `[desde 00:00:00Z, hasta + 1 día 00:00:00Z)`. El reporte del negocio compara
+  `Reserva.Fecha` como fecha de calendario (`>= desde`, `<= hasta`), sin
+  conversión de zona ni suma de días.
 - `desde > hasta` → `400`.
-- Rango mayor a 366 días → `400`.
 - Formato inválido, ausente o con hora → `400`.
 - Rango válido sin datos (por ejemplo mayo de 2026) → `200` con
   `grupos: []` y totales en cero.
+- No se impone un máximo de días: el requisito oficial no lo exige.
 
 **Comprobación**
 
@@ -856,9 +924,9 @@ dos rangos distintos producen resultados distintos sobre los mismos datos.
 | N-04 | Transición rechazada sin notificación | Solicitud ya resuelta o reserva ya confirmada | Se repite aprobar/confirmar o se intenta una transición fuera de la tabla | `409` (o el rechazo que corresponda); estado sin cambios; cero notificaciones y cero correos nuevos | Servicios de resolución/transición y API |
 | N-05 | Correo desactivado sin encolado | `ana` con `habilitado: false` | Se genera una notificación para ella | Notificación interna creada; cero correos nuevos para esa notificación; activación y recuperación siguen encolando | Servicio de notificaciones y flujos de Control de Acceso |
 | N-06 | SMTP caído | Host SMTP inaccesible o envío que lanza | Se crea/resuelve/confirma; luego se ejecuta el procesador | La operación de origen responde éxito; el correo queda pendiente; los intentos avanzan; no se exponen credenciales | Servicio con envío falso y prueba manual con SMTP apagado |
-| N-07 | Límite de fallos | Correo pendiente y envío que siempre falla | Se ejecuta el procesador tres veces y una cuarta | Intentos 1, 2, 3; al tercero `Fallido`; la cuarta no llama al envío; el error se conserva | `ProcesadorColaCorreosTests` |
+| N-07 | Límite de fallos | Correo pendiente y envío que siempre falla | Se ejecuta el procesador tres veces y una cuarta | Fallos 1, 2 y 3 (`Intentos = 1, 2, 3`); al tercer fallo `Fallido`; la cuarta no llama al envío porque solo se consultan `Pendiente`; el error se conserva | `ProcesadorColaCorreosTests` |
 | N-08 | Procesador ejecutado dos veces | Un correo pendiente y envío correcto | Se ejecuta el procesador dos veces seguidas | Un solo envío; la segunda ejecución devuelve 0; estado `Enviado` | `ProcesadorColaCorreosTests` |
-| N-09 | Rango inválido | Reportes disponibles | `hasta < desde`, formato inválido, parámetro ausente o rango > 366 días | `400` controlado, sin listados ni detalles internos | Controlador y API |
+| N-09 | Rango inválido | Reportes disponibles | `hasta < desde`, formato inválido o parámetro ausente | `400` controlado, sin listados ni detalles internos | Controlador y API |
 | N-10 | Rango vacío | Reportes disponibles | Se consulta un rango sin registros | `200` con `grupos: []` y totales en cero | Servicio y API |
 | N-11 | Sin Administradores activos | Ningún Administrador activo | `ana` crea una solicitud | `201`; cero notificaciones y cero correos; la solicitud existe | Servicio de creación |
 | N-12 | Duplicado de solicitud | Solicitud pendiente de `ana` | `ana` crea otra igual | `409`; no se crea una segunda notificación ni un segundo correo | Servicio y API de permisos |
@@ -879,20 +947,21 @@ reproducibles.
 | D-NOT-02 | Catálogo de tipos. | `SolicitudPermisoCreada`, `SolicitudPermisoAprobada`, `SolicitudPermisoRechazada` y `ReservaConfirmada`. Se serializa como texto. |
 | D-NOT-03 | «Todos los Administradores». | Solo Administradores **activos**. Un Administrador inactivo no recibe notificación ni correo. Si no hay ninguno, la solicitud se crea con cero notificaciones. |
 | D-NOT-04 | Notificación de aprobación. | La solicitud termina en `Aplicada` por la máquina de estados, pero la notificación usa el tipo `SolicitudPermisoAprobada` y el mensaje dice que fue aprobada y que el permiso quedó concedido. No se expone el estado interno «Aplicada» como resultado distinto. |
-| D-NOT-05 | Notificación de rechazo. | Incluye el motivo exacto escrito por el Administrador, tanto en la notificación interna como en el correo. Sin motivo no hay rechazo ni notificación. |
+| D-NOT-05 | Notificación de rechazo. | Se usa el valor ya persistido en `SolicitudPermiso.MotivoRechazo`; el servicio actual aplica `motivo.Trim()`, así que la notificación y el correo muestran ese mismo valor recortado. Sin motivo no hay rechazo ni notificación. |
 | D-NOT-06 | Evento del negocio. | Se elige la confirmación válida de una reserva (`Solicitada → Confirmada`) y se notifica al propietario. Rechazar, cancelar o finalizar no generan esta notificación. |
 | D-NOT-07 | Preferencia de correo. | Se agrega a `Usuario` un booleano `RecibirCorreosNotificacion` con valor inicial `true`, mediante una migración nueva. Afecta solo a los correos de notificaciones; activación, recuperación y restablecimiento siguen encolando siempre. |
 | D-NOT-08 | Alcance de la bandeja. | `GET /api/notificaciones` siempre se limita al usuario de la sesión, incluido el Administrador. No existe un listado global de notificaciones; la cola de correos es la vista administrativa. |
 | D-NOT-09 | Atomicidad de la entrega. | La notificación interna y el correo encolado forman una sola unidad de trabajo. Si la preferencia está activa y una de las dos escrituras falla, la operación de origen no se declara exitosa y no deja una entrega parcial. Si la preferencia está desactivada, solo se escribe la notificación interna. |
 | D-NOT-10 | Idempotencia de lectura. | Marcar una notificación ya leída responde `200`, mantiene `Leida = true` y conserva el `LeidaEn` original. No se considera un error. |
 | D-NOT-11 | Acceso a notificación ajena. | `403` para una notificación existente de otro usuario, `404` para una inexistente y `401` sin sesión. El Administrador tampoco puede marcar notificaciones ajenas. |
-| D-NOT-12 | Doble procesamiento. | RF-NOT-12 se garantiza para ejecuciones secuenciales. No se exige coordinación entre dos workers concurrentes; si se implementa, se documenta y se prueba aparte. |
+| D-NOT-12 | Doble procesamiento. | RF-NOT-12 se garantiza solo para ejecuciones secuenciales: la segunda ejecución no encuentra el correo `Pendiente`. Las pruebas de procesamiento consecutivo no demuestran exclusión mutua entre workers concurrentes ni recuperación ante una caída posterior al envío y anterior a la persistencia de `Enviado`; esos casos no se prometen ni se usan como criterio de aceptación. |
 | D-NOT-13 | Contenido de los mensajes. | El texto exacto no es un requisito. Las pruebas verifican datos clave (solicitante, permiso, resultado, motivo, espacio, fecha y horario) y que no haya secretos; no comparan una redacción literal. |
 | D-NOT-14 | Reintentos y notificaciones. | Reintentar el envío de un correo no crea otra notificación. Repetir una operación de negocio rechazada tampoco crea una notificación nueva. |
-| D-NOT-15 | Reutilización de la cola. | Se conservan `CorreoEnCola`, `IColaCorreosRepository`, `ProcesadorColaCorreos`, `ColaCorreosWorker`, el límite de 3 intentos y `GET /api/correos`. Las notificaciones solo agregan correos a esa cola; no se crea una segunda cola ni un segundo worker. |
+| D-NOT-15 | Reutilización de la cola. | Se conservan `CorreoEnCola`, `IColaCorreosRepository`, `ProcesadorColaCorreos`, `ColaCorreosWorker`, el límite de 3 fallos y `GET /api/correos`. Las notificaciones solo agregan correos a esa cola; no se crea una segunda cola ni un segundo worker. |
+| D-NOT-16 | Semántica de `Intentos`. | `Intentos` cuenta **fallos**, no envíos exitosos: se incrementa solo cuando el envío lanza. Al tercer fallo el correo queda `Fallido` y deja de ser candidato porque el procesador solo consulta `Pendiente`. Un envío exitoso conserva el número de fallos previos y limpia `UltimoError`. |
 | D-REP-01 | Reporte del Core. | Se elige «solicitudes de permiso agrupadas por estado actual», no documentos por usuario. Se filtra por `CreadaEn`. |
 | D-REP-02 | Reporte del negocio. | Se elige «horas totales y cantidad de reservas por espacio», solo `Confirmada` y `Finalizada`, con duración promedio. Se filtra por `Fecha` de la reserva, no por `CreadaEn`. |
-| D-REP-03 | Semántica de fechas. | `desde` y `hasta` obligatorios, `yyyy-MM-dd`, UTC, inclusivos. `hasta < desde`, formato inválido o rango > 366 días → `400`. Rango vacío → `200` con grupos y totales vacíos. |
+| D-REP-03 | Semántica de fechas. | `desde` y `hasta` obligatorios, `yyyy-MM-dd`, inclusivos. Instantes (`CreadaEn`, Core): `>= desde 00:00:00Z` y `< (hasta + 1 día) 00:00:00Z`. Fechas de calendario (`Reserva.Fecha`, negocio): `>= desde` y `<= hasta`, sin conversión de zona. `hasta < desde` o formato inválido → `400`; no se impone un máximo de días porque el requisito oficial no lo exige. Rango vacío → `200` con grupos y totales vacíos. |
 | D-REP-04 | Autorización de reportes. | Administrador ve todos los registros; Estándar solo los propios. El filtro se aplica antes de agrupar. Los parámetros del cliente no pueden ampliar el alcance. |
 | D-REP-05 | Grupos vacíos. | Se omiten los estados y espacios sin registros. Un rango sin datos devuelve `grupos: []`, no grupos con cero. |
 | D-REP-06 | Redondeo. | Los totales se calculan sin redondear y se proyectan con hasta dos decimales. En los ejemplos, `3.5`, `1.75`, `7.0` y `2.0` son valores exactos. |
@@ -917,8 +986,9 @@ reproducibles.
 
 - La redacción exacta de los mensajes y asuntos queda a criterio de la
   implementación, siempre que incluya los datos exigidos (D-NOT-13).
-- La concurrencia de dos workers simultáneos no está exigida por RF-NOT-12;
-  se documenta como limitación si no se implementa (D-NOT-12).
+- La concurrencia de dos workers simultáneos y la caída del proceso después
+  del envío pero antes de persistir `Enviado` no están exigidas por RF-NOT-12;
+  se documentan como limitaciones y no se presentan como garantías (D-NOT-12).
 - La preferencia de correo se guarda en `Usuario`; si en el futuro se
   requieren más canales, se podrá extraer a una tabla de preferencias sin
   cambiar el comportamiento observado.
@@ -972,7 +1042,7 @@ La práctica se considera terminada cuando:
    - cómo desactivar el correo;
    - cómo ejecutar el procesador de la cola;
    - cómo provocar un fallo de SMTP;
-   - el máximo de 3 intentos;
+   - el máximo de 3 fallos (`Intentos` cuenta fallos, no envíos exitosos);
    - qué pregunta responde el reporte del negocio;
    - cómo consultar ambos reportes con un rango de fechas.
 5. Se comprobaron los seis frentes de la revisión acumulada de la Práctica 5.
