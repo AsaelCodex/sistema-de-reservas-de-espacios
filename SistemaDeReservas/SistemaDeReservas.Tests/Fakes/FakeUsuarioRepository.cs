@@ -51,6 +51,21 @@ public sealed class FakeUsuarioRepository : IUsuarioRepository
         return Task.CompletedTask;
     }
 
+    public Task<bool> ActualizarPreferenciaCorreoAsync(
+        Guid usuarioId,
+        bool habilitado,
+        CancellationToken cancellationToken = default)
+    {
+        var usuario = _usuarios.FirstOrDefault(u => u.Id == usuarioId);
+        if (usuario is null)
+        {
+            return Task.FromResult(false);
+        }
+
+        usuario.RecibirCorreosNotificacion = habilitado;
+        return Task.FromResult(true);
+    }
+
     public Task<IReadOnlyList<Usuario>> ObtenerTodosAsync(CancellationToken cancellationToken = default)
     {
         IReadOnlyList<Usuario> usuarios = _usuarios.ToList();

@@ -106,6 +106,39 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                     b.ToTable("CorreosEnCola");
                 });
 
+            modelBuilder.Entity("SistemaDeReservas.Core.Notifications.Notificacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreadaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("DestinatarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Leida")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LeidaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Mensaje")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinatarioId", "Leida", "CreadaEn");
+
+                    b.ToTable("Notificaciones");
+                });
+
             modelBuilder.Entity("SistemaDeReservas.Core.Permissions.PermisoOtorgado", b =>
                 {
                     b.Property<Guid>("Id")
@@ -329,6 +362,11 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("RecibirCorreosNotificacion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<int>("Rol")
                         .HasColumnType("int");
 
@@ -349,6 +387,15 @@ namespace SistemaDeReservas.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("SistemaDeReservas.Core.Notifications.Notificacion", b =>
+                {
+                    b.HasOne("SistemaDeReservas.Core.Users.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("DestinatarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SistemaDeReservas.Core.Permissions.PermisoOtorgado", b =>

@@ -56,6 +56,24 @@ public class UsuarioRepository : IUsuarioRepository
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> ActualizarPreferenciaCorreoAsync(
+        Guid usuarioId,
+        bool habilitado,
+        CancellationToken cancellationToken = default)
+    {
+        // Actualización dirigida: no se cargan ni se reescriben nombre, correo,
+        // contraseña, rol, estado ni bloqueo.
+        var afectadas = await _context.Usuarios
+            .Where(usuario => usuario.Id == usuarioId)
+            .ExecuteUpdateAsync(
+                actualizacion => actualizacion.SetProperty(
+                    usuario => usuario.RecibirCorreosNotificacion,
+                    habilitado),
+                cancellationToken);
+
+        return afectadas > 0;
+    }
+
     public async Task<IReadOnlyList<Usuario>> ObtenerTodosAsync(
         CancellationToken cancellationToken = default)
     {
