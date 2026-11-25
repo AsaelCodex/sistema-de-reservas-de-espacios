@@ -50,16 +50,19 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
   los cinco requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-05).
   La evaluación climática de reservas (P4-03) también está implementada y
   verificada, con evidencia para RD-06, RD-07, RD-08, RD-09 y RD-12.
+  En la Práctica 5 están implementadas la bandeja de notificaciones propias
+  (RF-NOT-04), el marcado como leída (RF-NOT-05) y la persistencia y gestión
+  de la preferencia de correo (base de RF-NOT-07).
   El detalle y la evidencia están en `docs/matriz-requisitos.md`. La
   comprobación final desde un clon limpio (P4-04) está en
   `docs/practica-4-cierre.md`.
-- **Pruebas:** 659 casos en verde (401 métodos de prueba, las teorías se
-  expanden): 640 casos sin LocalDB —negocio con fakes, seguridad, correo,
-  documentos, evaluación climática, controladores invocados en memoria,
-  pruebas HTTP con `WebApplicationFactory` y el flujo real permisos–reservas
-  con repositorios de prueba— y 19 casos de persistencia sobre SQL Server
-  LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una base propia por
-  prueba que se elimina al terminar.
+- **Pruebas:** 698 casos en verde (435 métodos de prueba, las teorías se
+  expanden): 675 casos sin LocalDB —negocio con fakes, seguridad, correo,
+  documentos, evaluación climática, notificaciones, controladores invocados
+  en memoria, pruebas HTTP con `WebApplicationFactory` y el flujo real
+  permisos–reservas con repositorios de prueba— y 23 casos de persistencia
+  sobre SQL Server LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una
+  base propia por prueba que se elimina al terminar.
 - **Endpoints:**
 
 | Método y ruta | Descripción | Rol |
@@ -71,6 +74,10 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
 | `DELETE /api/sesiones` | Cierre de sesión | Autenticado |
 | `GET /api/usuarios/yo` | Usuario autenticado y su rol | Autenticado |
 | `PUT /api/usuarios/yo/contrasena` | Cambio de contraseña propia | Autenticado |
+| `GET /api/notificaciones?leida=` | Notificaciones propias; `leida` opcional (`true` o `false`); orden de más reciente a más antigua | Autenticado |
+| `PUT /api/notificaciones/{id}/leida` | Marca como leída una notificación propia (idempotente; 403 si es ajena, 404 si no existe) | Autenticado |
+| `GET /api/usuarios/yo/notificaciones-correo` | Preferencia propia de correo de notificaciones (`{ "habilitado": true }`) | Autenticado |
+| `PUT /api/usuarios/yo/notificaciones-correo` | Activa o desactiva la preferencia propia; exige `habilitado` booleano | Autenticado |
 | `POST /api/recuperacion-contrasena` | Inicio de recuperación por correo | Público |
 | `POST /api/recuperacion-contrasena/cambio` | Restablecimiento con correo y código | Público |
 | `GET /api/usuarios` | Listado de usuarios | Administrador |
@@ -97,10 +104,10 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
 | `DELETE /api/documentos/{id}` | Eliminación lógica (204; 403 si es de otro Estándar) | Autenticado |
 
 - **Pendiente (piezas posteriores):** RF-DOC-06 (auditoría),
-  Notificaciones (RF-NOT-01 a RF-NOT-07; la cola de correos
-  RF-NOT-08 a RF-NOT-13 ya está implementada), Reportes (RF-REP),
-  Auditoría (RF-AUD) y el resto del módulo de negocio (RF-NEG-01,
-  RF-NEG-07, RF-NEG-08 y RF-NEG-10).
+  integración de eventos y encolado de notificaciones (RF-NOT-01 a
+  RF-NOT-03, RF-NOT-06 y la parte de RF-NOT-07 que decide si se encola
+  correo), Reportes (RF-REP), Auditoría (RF-AUD) y el resto del módulo de
+  negocio (RF-NEG-01, RF-NEG-07, RF-NEG-08 y RF-NEG-10).
 
 ## Requisitos
 
@@ -683,6 +690,78 @@ forma de la respuesta y la regla aplicada.
 
 El detalle completo está en `docs/api-externa.md`.
 
+## Notificaciones (práctica 5, P5-02)
+
+La bandeja interna y la preferencia de correo se persisten en la tabla
+`Notificaciones` y en la columna `Usuarios.RecibirCorreosNotificacion`
+(migración `AddNotificacionesYPreferenciaCorreo`). La preferencia parte en
+`true` para usuarios nuevos y existentes. Este bloque **no** conecta todavía
+los eventos de permisos o reservas ni encola correos: esa integración
+corresponde a P5-03. Por eso no existe un endpoint de producción para crear
+notificaciones de prueba; las pruebas usan fixtures y repositorios falsos.
+
+### Bandeja propia
+
+```http
+GET /api/notificaciones
+GET /api/notificaciones?leida=false
+GET /api/notificaciones?leida=true
+Authorization: Bearer <token>
+```
+
+- Devuelve únicamente las notificaciones del usuario de la sesión, incluido
+  cuando es Administrador. No hay listado global.
+- El orden es descendente por `fechaCreacion`; los empates se resuelven por
+  `id` para que el resultado sea estable.
+- `leida` es opcional: sin el parámetro devuelve todas, con `true` solo las
+  leídas y con `false` solo las no leídas. Cualquier otro valor responde
+  `400`.
+- Cada elemento tiene `id`, `tipo`, `mensaje`, `leida`, `fechaCreacion` y
+  `leidaEn`. Las fechas son instantes UTC.
+
+### Marcar como leída
+
+```http
+PUT /api/notificaciones/{id}/leida
+Authorization: Bearer <token>
+```
+
+- Solo el destinatario puede marcar su notificación. Un Administrador tampoco
+  puede marcar la de otro usuario.
+- Es idempotente: repetir la operación responde `200` y conserva el
+  `leidaEn` de la primera lectura.
+- La actualización modifica solo `Leida` y `LeidaEn`; no reescribe el
+  mensaje, el tipo, el destinatario ni la fecha de creación.
+- Códigos: `200` marcada o ya leída, `401` sin sesión válida, `403`
+  notificación existente de otro usuario y `404` notificación inexistente.
+  En `403` y `404` no se expone el contenido de la notificación.
+
+### Preferencia de correo
+
+```http
+GET /api/usuarios/yo/notificaciones-correo
+PUT /api/usuarios/yo/notificaciones-correo
+Content-Type: application/json
+
+{ "habilitado": false }
+```
+
+- Ambas operaciones usan exclusivamente el usuario de la sesión; no aceptan
+  un identificador de usuario en la ruta ni en el cuerpo.
+- `PUT` exige `habilitado` booleano. Un cuerpo vacío, `habilitado: null` o un
+  valor de otro tipo responde `400` y no desactiva nada.
+- La actualización es dirigida a esa columna: no cambia nombre, correo,
+  contraseña, rol, activación ni bloqueo, y no altera notificaciones ni
+  correos ya existentes.
+- La preferencia solo gobernará los correos de notificaciones cuando P5-03
+  conecte el encolado. Los correos de activación, recuperación y
+  restablecimiento no la consultan y seguirán encolándose siempre.
+- Sin sesión válida, `GET` y `PUT` responden `401`.
+
+**Limitación de este bloque:** la entrega completa de RF-NOT-07 se declara al
+integrar los eventos y el encolado en P5-03; aquí solo se entrega su
+persistencia y gestión.
+
 ## Cola de correos
 
 Los correos (activación, recuperación y restablecimiento) se encolan en
@@ -738,42 +817,43 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **640 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
-  de correo, de documentos, de evaluación climática, las pruebas de API que
-  invocan los controladores en memoria, las pruebas HTTP reales con
-  `WebApplicationFactory`/`TestServer` y el flujo real permisos–reservas con
-  repositorios de prueba. Esta parte no necesita base de datos ni servidor
-  externo (la evaluación climática usa un transporte falso).
-- **Entorno con persistencia**: los **19 casos de persistencia LocalDB**
+  **675 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  de correo, de documentos, de evaluación climática, de notificaciones, las
+  pruebas de API que invocan los controladores en memoria, las pruebas HTTP
+  reales con `WebApplicationFactory`/`TestServer` y el flujo real
+  permisos–reservas con repositorios de prueba. Esta parte no necesita base
+  de datos ni servidor externo (la evaluación climática usa un transporte
+  falso).
+- **Entorno con persistencia**: los **23 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
   crea su propia base `Reservas_Tests_*`, aplica las migraciones sobre una
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 659 casos salen de **401 métodos de prueba**: 310 `[Fact]`, 72
-`[Theory]` y 19 `[LocalDbFact]`; las teorías se expanden en 330 casos con
+Los 698 casos salen de **435 métodos de prueba**: 338 `[Fact]`, 74
+`[Theory]` y 23 `[LocalDbFact]`; las teorías se expanden en 337 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
-# solo los 19 casos de persistencia LocalDB
+# solo los 23 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 640 casos sin LocalDB
+# solo los 675 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (659).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (698).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
-- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 19
+- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 23
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **659 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **640
-ejecutadas / 0 fallidas / 19 omitidas**.
+Con LocalDB disponible la corrida completa es **698 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **675
+ejecutadas / 0 fallidas / 23 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
 
@@ -791,9 +871,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 659 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 640 ejecutadas, 0 fallidas, **19 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 659 ejecutadas, **19 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 640 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 698 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 675 ejecutadas, 0 fallidas, **23 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 698 ejecutadas, **23 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 675 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -818,9 +898,10 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
-> actual, con las operaciones de la Práctica 3 y el Manejador de Documentos
-> de la Práctica 4, tiene 659 casos. Los resultados históricos no se
-> reescriben ni se vuelven a atribuir a prácticas posteriores.
+> actual, con las operaciones de la Práctica 3, el Manejador de Documentos de
+> la Práctica 4 y la bandeja de notificaciones de la Práctica 5, tiene 698
+> casos. Los resultados históricos no se reescriben ni se vuelven a atribuir
+> a prácticas posteriores.
 
 La suite de **Gestión de permisos** (RF-GP-01 a RF-GP-07) fue validada
 contra los seis defectos de la variante A de la Práctica 2: cada uno se
