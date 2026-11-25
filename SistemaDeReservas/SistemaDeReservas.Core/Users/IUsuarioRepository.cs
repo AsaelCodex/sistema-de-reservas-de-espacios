@@ -12,5 +12,15 @@ public interface IUsuarioRepository
 
     Task ActualizarAsync(Usuario usuario, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Actualiza solo la preferencia de correo de notificaciones. Devuelve
+    /// <c>false</c> si el usuario no existe. Evita reescribir el resto de
+    /// columnas de <see cref="Usuario"/> (D-NOT-07).
+    /// </summary>
+    Task<bool> ActualizarPreferenciaCorreoAsync(
+        Guid usuarioId,
+        bool habilitado,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Usuario>> ObtenerTodosAsync(CancellationToken cancellationToken = default);
 }

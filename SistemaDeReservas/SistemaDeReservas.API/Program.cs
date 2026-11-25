@@ -140,6 +140,7 @@ builder.Services.AddScoped<IReservaRepository, ReservaRepository>();
 builder.Services.AddScoped<ISolicitudPermisoRepository, SolicitudPermisoRepository>();
 builder.Services.AddScoped<IPermisoOtorgadoRepository, PermisoOtorgadoRepository>();
 builder.Services.AddScoped<IDocumentoRepository, DocumentoRepository>();
+builder.Services.AddScoped<INotificacionRepository, NotificacionRepository>();
 builder.Services.AddSingleton<IAlmacenDocumentos>(
     _ => new AlmacenArchivosDocumentos(rutaDocumentos));
 builder.Services.AddSingleton<IEnvioCorreo>(sp =>
@@ -195,6 +196,9 @@ builder.Services.AddScoped<RecuperacionContrasenaService>();
 builder.Services.AddScoped<CambioContrasenaPropiaService>();
 builder.Services.AddScoped<AdministradorInicialService>();
 builder.Services.AddScoped<ListadoCorreosService>();
+builder.Services.AddScoped<ListadoNotificacionesService>();
+builder.Services.AddScoped<MarcarNotificacionLeidaService>();
+builder.Services.AddScoped<PreferenciaNotificacionesService>();
 builder.Services.AddScoped<CrearSolicitudPermisoService>();
 builder.Services.AddScoped<ListadoSolicitudesService>();
 builder.Services.AddScoped<ResolucionSolicitudService>();

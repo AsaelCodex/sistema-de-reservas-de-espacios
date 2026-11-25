@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<SolicitudPermiso> SolicitudesPermiso { get; set; }
     public DbSet<PermisoOtorgado> PermisosOtorgados { get; set; }
     public DbSet<Documento> Documentos { get; set; }
+    public DbSet<Notificacion> Notificaciones { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +28,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Usuario>()
             .HasIndex(c => c.Correo)
             .IsUnique();
+        modelBuilder.Entity<Usuario>()
+            .Property(u => u.RecibirCorreosNotificacion)
+            .HasDefaultValue(true);
         modelBuilder.Entity<TokenActivacion>()
             .HasIndex(t => t.Token)
             .IsUnique();
@@ -83,6 +87,16 @@ public class AppDbContext : DbContext
             documento.HasOne(d => d.Usuario)
                 .WithMany()
                 .HasForeignKey(d => d.UsuarioId);
+        });
+        modelBuilder.Entity<Notificacion>(notificacion =>
+        {
+            notificacion.Property(n => n.Mensaje)
+                .HasMaxLength(Notificacion.LongitudMaximaMensaje);
+            // D-NOT-01: consulta por destinatario, estado de lectura y fecha.
+            notificacion.HasIndex(n => new { n.DestinatarioId, n.Leida, n.CreadaEn });
+            notificacion.HasOne<Usuario>()
+                .WithMany()
+                .HasForeignKey(n => n.DestinatarioId);
         });
     }
 }
