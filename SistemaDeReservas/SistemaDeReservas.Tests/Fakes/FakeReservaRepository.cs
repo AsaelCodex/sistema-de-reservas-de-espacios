@@ -1,4 +1,5 @@
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Reports;
 using SistemaDeReservas.Core.Reservations;
 
 namespace SistemaDeReservas.Tests.Fakes;
@@ -115,6 +116,49 @@ public sealed class FakeReservaRepository : IReservaRepository
                 }
             }
         }
+    }
+
+    public Task<IReadOnlyList<GrupoReservasPorEspacio>> AgruparPorEspacioAsync(
+        DateTime desdeFechaInclusive,
+        DateTime hastaFechaInclusive,
+        Guid? usuarioId,
+        CancellationToken cancellationToken = default)
+    {
+        var desde = desdeFechaInclusive.Date;
+        var hasta = hastaFechaInclusive.Date;
+
+        var consulta = _reservas
+            .Where(r =>
+                r.Fecha.Date >= desde &&
+                r.Fecha.Date <= hasta &&
+                (r.Estado == EstadoReserva.Confirmada || r.Estado == EstadoReserva.Finalizada));
+
+        if (usuarioId is not null)
+        {
+            var propietarioId = usuarioId.Value;
+            consulta = consulta.Where(r => r.UsuarioId == propietarioId);
+        }
+
+        IReadOnlyList<GrupoReservasPorEspacio> resultado = consulta
+            .GroupBy(r => EspacioReserva.Normalizar(r.Espacio))
+            .Select(grupo =>
+            {
+                var cantidad = grupo.Count();
+                var segundosTotales = grupo.Sum(
+                    r => (decimal)(r.HoraFin - r.HoraInicio).TotalSeconds);
+                var horasTotales = segundosTotales / 3600m;
+                var duracionPromedio = cantidad > 0 ? horasTotales / cantidad : 0m;
+
+                return new GrupoReservasPorEspacio(
+                    grupo.Key,
+                    cantidad,
+                    horasTotales,
+                    duracionPromedio);
+            })
+            .OrderBy(grupo => grupo.Espacio, StringComparer.Ordinal)
+            .ToList();
+
+        return Task.FromResult(resultado);
     }
 
     private static List<Reserva> Ordenar(IEnumerable<Reserva> reservas)

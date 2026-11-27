@@ -1,4 +1,5 @@
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Reports;
 
 namespace SistemaDeReservas.Core.Reservations;
 
@@ -38,5 +39,19 @@ public interface IReservaRepository
     Task ActualizarConNotificacionesAsync(
         Reserva reserva,
         IReadOnlyList<EntregaNotificacion> entregas,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// RF-REP-02, RF-REP-03, RF-REP-04, RF-REP-05 y RF-NEG-08: agrupa en
+    /// persistencia las reservas en estado Confirmada o Finalizada por espacio
+    /// dentro del rango inclusivo de fechas de calendario
+    /// [<paramref name="desdeFechaInclusive"/>, <paramref name="hastaFechaInclusive"/>].
+    /// Si <paramref name="usuarioId"/> tiene valor, filtra por ese propietario
+    /// antes de agrupar y sumar.
+    /// </summary>
+    Task<IReadOnlyList<GrupoReservasPorEspacio>> AgruparPorEspacioAsync(
+        DateTime desdeFechaInclusive,
+        DateTime hastaFechaInclusive,
+        Guid? usuarioId,
         CancellationToken cancellationToken = default);
 }

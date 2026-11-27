@@ -9,6 +9,7 @@ using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.Documentos;
 using SistemaDeReservas.Business.GestionPermisos;
 using SistemaDeReservas.Business.Notificaciones;
+using SistemaDeReservas.Business.Reportes;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Documents;
 using SistemaDeReservas.Core.Notifications;
@@ -181,6 +182,8 @@ builder.Services.AddScoped<AutorizacionPermisosService>();
 builder.Services.AddScoped<CrearReservaService>();
 builder.Services.AddScoped<ListadoReservasService>();
 builder.Services.AddScoped<TransicionReservaService>();
+builder.Services.AddScoped<SolicitudesPorEstadoService>();
+builder.Services.AddScoped<ReservasPorEspacioService>();
 builder.Services.AddScoped<SubirDocumentoService>(sp =>
     new SubirDocumentoService(
         sp.GetRequiredService<IDocumentoRepository>(),

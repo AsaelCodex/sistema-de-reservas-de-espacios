@@ -46,6 +46,11 @@ public class AppDbContext : DbContext
             reserva.HasOne(r => r.Usuario)
                 .WithMany()
                 .HasForeignKey(r => r.UsuarioId);
+            // RF-REP-02, RF-REP-04, RF-REP-05 y RF-NEG-08: índices para el
+            // reporte de reservas por espacio filtrado por fecha de calendario,
+            // estados elegibles y, para Estándar, por propietario.
+            reserva.HasIndex(r => new { r.Fecha, r.Estado, r.Espacio });
+            reserva.HasIndex(r => new { r.UsuarioId, r.Fecha, r.Estado, r.Espacio });
         });
         modelBuilder.Entity<SolicitudPermiso>(solicitud =>
         {
@@ -55,6 +60,11 @@ public class AppDbContext : DbContext
             solicitud.HasIndex(s => new { s.SolicitanteId, s.Permiso })
                 .IsUnique()
                 .HasFilter("[Estado] = 0");
+            // RF-REP-01, RF-REP-04 y RF-REP-05: índices para el reporte de
+            // solicitudes por estado actual filtrado por instante UTC CreadaEn
+            // y, para Estándar, por SolicitanteId.
+            solicitud.HasIndex(s => new { s.CreadaEn, s.Estado });
+            solicitud.HasIndex(s => new { s.SolicitanteId, s.CreadaEn, s.Estado });
         });
         modelBuilder.Entity<PermisoOtorgado>(otorgado =>
         {
