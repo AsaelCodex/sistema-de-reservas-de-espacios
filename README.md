@@ -50,19 +50,22 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
   los cinco requisitos del Manejador de Documentos (RF-DOC-01 a RF-DOC-05).
   La evaluación climática de reservas (P4-03) también está implementada y
   verificada, con evidencia para RD-06, RD-07, RD-08, RD-09 y RD-12.
-  En la Práctica 5 están implementadas la bandeja de notificaciones propias
-  (RF-NOT-04), el marcado como leída (RF-NOT-05), la persistencia y gestión
-  de la preferencia de correo (RF-NOT-07) y los eventos de permisos y
-  reservas con entrega interna y encolado condicional de correo (RF-NOT-01,
-  RF-NOT-02, RF-NOT-03, RF-NOT-06 y RF-NOT-07).
+  En la Práctica 5 están implementadas y verificadas la bandeja de
+  notificaciones propias (RF-NOT-04), el marcado como leída (RF-NOT-05), la
+  persistencia y gestión de la preferencia de correo (RF-NOT-07), los eventos
+  de permisos y reservas con entrega interna y encolado condicional de correo
+  (RF-NOT-01, RF-NOT-02, RF-NOT-03, RF-NOT-06 y RF-NOT-07) y la cola de correos
+  completa con configuración SMTP por variables de entorno, reintentos
+  limitados a 3 fallos, no duplicación y consulta administrativa por listado e
+  identificador (RF-NOT-08 a RF-NOT-13).
   El detalle y la evidencia están en `docs/matriz-requisitos.md`. La
   comprobación final desde un clon limpio (P4-04) está en
   `docs/practica-4-cierre.md`.
-- **Pruebas:** 752 casos en verde (489 métodos de prueba, las teorías se
-  expanden): 710 casos sin LocalDB —negocio con fakes, seguridad, correo,
+- **Pruebas:** 781 casos en verde (509 métodos de prueba, las teorías se
+  expanden): 736 casos sin LocalDB —negocio con fakes, seguridad, correo,
   documentos, evaluación climática, notificaciones, controladores invocados
   en memoria, pruebas HTTP con `WebApplicationFactory` y el flujo real
-  permisos–reservas con repositorios de prueba— y 42 casos de persistencia
+  permisos–reservas con repositorios de prueba— y 45 casos de persistencia
   sobre SQL Server LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una
   base propia por prueba que se elimina al terminar.
 - **Endpoints:**
@@ -86,7 +89,8 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
 | `PUT /api/usuarios/{id}/rol` | Cambio de rol | Administrador |
 | `PUT /api/usuarios/{id}/estado` | Desactivar/reactivar | Administrador |
 | `PUT /api/usuarios/{id}/contrasena` | Restablecimiento forzado (envía código al correo) | Administrador |
-| `GET /api/correos` | Consulta de la cola de correos (estado, intentos, errores) | Administrador |
+| `GET /api/correos` | Consulta de la cola de correos (hasta los 200 más recientes; estado, intentos, fechas y último error, sin cuerpo) | Administrador |
+| `GET /api/correos/{id}` | Consulta un correo específico de la cola por identificador (permite consultar correos antiguos fuera de los 200 más recientes, sin cuerpo; 404 si no existe) | Administrador |
 | `POST /api/solicitudes-permisos` | Solicitud de un permiso del catálogo | Autenticado |
 | `GET /api/solicitudes-permisos/mias` | Solicitudes propias con su estado | Autenticado |
 | `GET /api/solicitudes-permisos/pendientes` | Cola de solicitudes por resolver | Administrador |
@@ -114,7 +118,7 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` debe mostrar 10.x)
 - Git
 - SQL Server (LocalDB, Express o superior) para ejecutar la API y para
-  las 42 pruebas de persistencia (si no está disponible, esas pruebas se
+  las 45 pruebas de persistencia (si no está disponible, esas pruebas se
   omiten con el motivo; ver «Pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
@@ -864,46 +868,264 @@ Content-Type: application/json
 - Sin sesión válida, `GET` y `PUT` responden `401`.
 
 
-## Cola de correos
+## Cola de correos (práctica 5, P5-04 — RF-NOT-08 a RF-NOT-13)
 
 Los correos (activación, recuperación, restablecimiento y notificaciones de
-permisos o reservas) se encolan en la tabla `CorreosEnCola` y los envía un
-worker independiente (`ColaCorreosWorker`) cada `Correo:IntervaloSegundos`
-(por defecto 10). Cada correo queda registrado con estado (`Pendiente`,
-`Enviado`, `Fallido`), intentos, fechas y último error; se reintenta hasta 3
-veces y luego se marca `Fallido`. Un correo `Enviado` nunca se vuelve a
-procesar.
+permisos o reservas) nunca se envían dentro de la operación HTTP que los
+origina (`RF-NOT-08`): se encolan en la tabla `CorreosEnCola` en estado
+`Pendiente`, con `Intentos = 0`, `FechaEnvio = null` y `UltimoError = null`.
+Un proceso independiente (`ColaCorreosWorker` + `ProcesadorColaCorreos`,
+`RF-NOT-09`) toma lotes de hasta 20 pendientes (`TamanoLote = 20`) cada
+`Correo:IntervaloSegundos` (10 s por defecto; 5 s en `docker-compose.yml`) y
+los entrega mediante `IEnvioCorreo`.
 
-Los correos de notificación se crean en la misma transacción que la
-notificación interna y solo si la preferencia del destinatario está activa;
-el negocio nunca invoca `IEnvioCorreo`. Los de activación, recuperación y
-restablecimiento no consultan esa preferencia.
+### 1. Configuración SMTP por variables de entorno (`RF-NOT-13`, `RD-10`)
 
-Configuración de envío (credenciales **solo** por variables de
-entorno, RD-10 — nunca en el repositorio):
+Las credenciales y parámetros SMTP se leen únicamente de variables de entorno
+(`ConfiguracionCorreoSmtp.LeerYValidar`); nunca se escriben contraseñas ni
+claves reales en `appsettings.json`, `Dockerfile`, `docker-compose.yml` ni el
+repositorio:
 
 ```powershell
-$env:CorreoSmtp__Host = "smtp.ejemplo.com"
-$env:CorreoSmtp__Puerto = "587"
-$env:CorreoSmtp__Usuario = "usuario"
-$env:CorreoSmtp__Password = "clave"
-$env:CorreoSmtp__De = "no-responder@itla.edu.do"
-$env:CorreoSmtp__Ssl = "true"
+$env:CorreoSmtp__Host = "127.0.0.1"
+$env:CorreoSmtp__Puerto = "1025"
+$env:CorreoSmtp__Usuario = ""
+$env:CorreoSmtp__Password = ""
+$env:CorreoSmtp__De = "no-responder@reservas.local"
+$env:CorreoSmtp__Ssl = "false"
 ```
 
-Si `CorreoSmtp:Host` no está definido, el worker escribe cada correo
-como archivo `.eml` en el directorio `App:DirectorioCorreos`
-(`correo-salida/` en desarrollo), para poder verlos en la demo sin
-servidor de correo.
+Reglas de validación al iniciar:
 
-Comprobar el funcionamiento:
+- **Sin `CorreoSmtp__Host`** (o vacío): la aplicación arranca en modo de
+  respaldo `.eml` (`ArchivoEnvioCorreo`) y escribe cada correo en
+  `App:DirectorioCorreos` (`correo-salida/` en desarrollo, `/app/correo-salida`
+  en el contenedor). No exige `CorreoSmtp__De` ni credenciales.
+- **Con `CorreoSmtp__Host` definido**:
+  - `CorreoSmtp__De` es obligatorio y debe tener formato de correo válido.
+  - `CorreoSmtp__Puerto` debe ser entero entre `1` y `65535` (por defecto `587`).
+  - `CorreoSmtp__Ssl` debe ser booleano (`true` o `false`; por defecto `false`).
+  - `CorreoSmtp__Usuario` y `CorreoSmtp__Password` deben definirse ambos o
+    dejarse ambos vacíos (servidores locales de captura como Mailpit no
+    requieren autenticación).
+  - `SmtpEnvioCorreo` aplica un tiempo de espera acotado (`10 s` por defecto)
+    y redacta la contraseña si algún mensaje de excepción del transporte la
+    incluyera.
 
-1. Registrar un usuario nuevo (`POST /api/usuarios`).
-2. Verificar que aparece el archivo en el volumen (`/app/correo-salida`
-   en el contenedor, `correo-salida/` con `dotnet run`; ver «Consultar los
-   correos `.eml`»), dentro de los ~10 segundos.
-3. Consultar `GET /api/correos` como Administrador: el correo aparece
-   con estado `Enviado`, `FechaEnvio` y `Intentos = 0`.
+`docker-compose.yml` propaga `CorreoSmtp__Host`, `CorreoSmtp__Puerto`,
+`CorreoSmtp__Usuario`, `CorreoSmtp__Password`, `CorreoSmtp__De` y
+`CorreoSmtp__Ssl` con valores por defecto vacíos, conservando el modo `.eml` en
+el arranque normal. `.env.example` documenta las variables con valores vacíos o
+ficticios.
+
+### 2. Demostración reproducible con servidor de captura SMTP (Mailpit)
+
+Para verificar el envío SMTP real sin cuentas externas ni credenciales reales,
+el archivo `docker-compose.smtp.yml` añade un contenedor `mailpit`
+(`axllent/mailpit:latest`), publica su interfaz web/API **únicamente en
+localhost** (`127.0.0.1:8025:8025`) y apunta la API a `mailpit:1025`.
+
+Comandos exactos de arranque aislado:
+
+```powershell
+Copy-Item .env.example .env
+docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml up --build -d
+```
+
+Pasos de comprobación:
+
+1. **Iniciar sesión** con el Administrador inicial (`admin@reservas.local`) y
+   registrar/activar un usuario Estándar (`ana@itla.edu.do`). El correo de
+   activación es capturado por SMTP y puede consultarse en
+   `http://localhost:8025` (o `GET http://localhost:8025/api/v1/messages`).
+2. **Provocar un evento que notifica y encola correo** (por ejemplo, crear una
+   solicitud de permiso como Estándar):
+
+```powershell
+Enviar-Json "$base/api/solicitudes-permisos" '{"permiso":"CrearReserva"}' -Token $std
+```
+
+3. **Comprobar la notificación interna** del destinatario:
+
+```powershell
+curl.exe -s "$base/api/notificaciones" -H "Authorization: $adm"
+# 200: [{"tipo":"SolicitudPermisoCreada","mensaje":"Nueva solicitud de permiso CrearReserva de ...","leida":false,...}]
+```
+
+4. **Comprobar el mensaje capturado por SMTP** (tras ~5 s del worker en
+   Compose):
+
+```powershell
+curl.exe -s "http://localhost:8025/api/v1/messages"
+```
+
+   El mensaje muestra remitente `no-responder@reservas.local`, destinatario
+   `admin@reservas.local`, asunto `Nueva solicitud de permiso` y el cuerpo con
+   el solicitante y el permiso solicitado.
+5. **Comprobar el estado `Enviado` en la cola**:
+
+```powershell
+curl.exe -s "$base/api/correos" -H "Authorization: $adm"
+# 200: [{"id":"...","destinatario":"admin@reservas.local","asunto":"Nueva solicitud de permiso","estado":"Enviado","intentos":0,"fechaCreacion":"...","fechaEnvio":"...","ultimoError":null}, ...]
+```
+
+> **Captura SMTP local vs. recepción en buzón externo:** un servidor de captura
+> local (Mailpit o listener SMTP en loopback) verifica de extremo a extremo que
+> el worker extrae el correo de SQL Server, abre una sesión TCP/SMTP real con
+> `SmtpEnvioCorreo`, transmite `MAIL FROM`, `RCPT TO` y `DATA` con el
+> destinatario, asunto y cuerpo esperados, y persiste `Estado = Enviado` con
+> `FechaEnvio` tras el `250 OK`. No demuestra la entrega final a un buzón
+> externo de Internet (Gmail, Outlook, dominio institucional), la cual depende
+> además de credenciales de un relay externo, resolución DNS/MX, reputación de
+> IP, SPF/DKIM/DMARC y políticas anti-spam del proveedor.
+
+### 3. Fallos, reintentos y máximo de 3 fallos (`RF-NOT-08`, `RF-NOT-10`)
+
+**Semántica de `Intentos` (`D-NOT-16`):** `Intentos` cuenta **fallos de
+envío**, no intentos totales ni envíos exitosos. Solo se incrementa en el
+bloque `catch` de `ProcesadorColaCorreos` cuando `IEnvioCorreo.EnviarAsync`
+lanza una excepción:
+
+- Un correo enviado con éxito en su primera ejecución queda en
+  `Estado = Enviado`, `Intentos = 0`, `FechaEnvio != null` y
+  `UltimoError = null`.
+- `ProcesadorColaCorreos.LimiteIntentos` es **3** (máximo de 3 fallos):
+  - **1.er fallo:** `Estado = Pendiente`, `Intentos = 1`, `UltimoError` con el
+    motivo del fallo, `FechaEnvio = null`.
+  - **2.º fallo:** `Estado = Pendiente`, `Intentos = 2`, `UltimoError`
+    actualizado, `FechaEnvio = null`.
+  - **3.er fallo:** `Estado = Fallido`, `Intentos = 3`, `UltimoError`
+    conservado, `FechaEnvio = null`.
+  - **4.º ciclo y siguientes:** `ObtenerPendientesAsync` solo selecciona filas
+    con `Estado = Pendiente`; un correo `Fallido` no vuelve a seleccionarse ni
+    se reintenta una cuarta vez.
+- Si el servidor SMTP se recupera antes del 3.er fallo (por ejemplo, tras 1 o 2
+  fallos), el envío siguiente marca `Estado = Enviado`, registra `FechaEnvio`,
+  limpia `UltimoError = null` y **conserva** el número de fallos previos en
+  `Intentos`.
+
+**Cómo provocar el fallo manteniendo API y BD activas:**
+
+Con la composición de Mailpit en marcha, detener solo el contenedor SMTP:
+
+```powershell
+docker compose -p reservas-smtp stop mailpit
+```
+
+(En ejecución local con `dotnet run`, apuntar `CorreoSmtp__Host=127.0.0.1` a un
+puerto local cerrado o detener el receptor SMTP local mientras la API y
+LocalDB siguen corriendo).
+
+1. Ejecutar una operación que notifica (por ejemplo, aprobar una solicitud con
+   `PUT /api/solicitudes-permisos/{id}/aprobar`). La operación responde `200`
+   de inmediato (`RF-NOT-08`), la solicitud pasa a `Aplicada` y la notificación
+   interna del solicitante queda disponible en `GET /api/notificaciones`.
+2. Consultar `GET /api/correos` como Administrador tras cada ciclo del worker:
+   - Con `Correo__IntervaloSegundos=5` (en `docker-compose.yml`), los tres
+     fallos se completan en aproximadamente **15 segundos** (un fallo cada ~5 s;
+     si el host no responde al SYN TCP, cada intento falla por rechazo de
+     conexión o a lo sumo tras el timeout de 10 s de `SmtpEnvioCorreo`).
+   - Tras el 1.er y 2.º ciclo se observa `estado: "Pendiente"` con
+     `intentos: 1` e `intentos: 2`.
+   - Tras el 3.er ciclo se observa `estado: "Fallido"`, `intentos: 3`,
+     `fechaEnvio: null` y `ultimoError` poblado (sin credenciales).
+   - Esperar un 4.º ciclo adicional (~5–10 s) y volver a consultar confirma que
+     `estado` sigue en `"Fallido"` e `intentos` permanece en `3`.
+
+### 4. Verificación de envíos sin duplicados (`RF-NOT-12`, `D-NOT-12`)
+
+Una vez que un correo pasa a `Enviado`:
+
+1. `ObtenerPendientesAsync` filtra exclusivamente `Estado == EstadoCorreo.Pendiente`.
+2. En la demostración operativa, tras el envío del primer ciclo del worker se
+   espera uno o más ciclos adicionales (`Correo:IntervaloSegundos`) y se
+   comprueba tanto en la base de datos (`GET /api/correos`: un solo registro
+   con la misma `fechaEnvio` y `intentos: 0`) como en el servidor SMTP de
+   captura / directorio `.eml` que el contador de mensajes recibidos para ese
+   evento es **exactamente 1**.
+3. No se debe lanzar un procesador manual en paralelo con `ColaCorreosWorker`
+   sobre la misma cola.
+
+> **Alcance de la garantía (`D-NOT-12`):** la no duplicación está garantizada y
+> verificada para **ejecuciones secuenciales** del procesador sobre el mismo
+> repositorio. No promete exclusión mutua entre múltiples instancias de worker
+> concurrentes ni entrega exactamente una vez (*exactly-once*) si el proceso se
+> interrumpe después de que el servidor SMTP aceptó el mensaje y antes de que
+> EF Core confirme `Estado = Enviado` en SQL Server.
+
+### 5. Consulta administrativa y correos antiguos (`RF-NOT-11`, `RD-06`)
+
+```http
+GET /api/correos
+GET /api/correos/{id}
+Authorization: Bearer <token-administrador>
+```
+
+- **`GET /api/correos`** devuelve hasta los **200 correos más recientes**
+  (`ListadoCorreosService.LimiteListado = 200`), ordenados por `fechaCreacion`
+  descendente (y `id` como desempate determinista).
+- **`GET /api/correos/{id}`** permite a un Administrador consultar cualquier
+  correo concreto por su `Guid`, incluidos correos antiguos que hayan quedado
+  fuera de la ventana de los 200 más recientes. Responde `200` si existe o
+  `404` si no existe.
+- Ambas rutas proyectan únicamente `id`, `destinatario`, `asunto`, `estado`,
+  `intentos`, `fechaCreacion`, `fechaEnvio` y `ultimoError`. **Nunca exponen el
+  campo `cuerpo`**, evitando filtrar enlaces de activación o códigos de
+  recuperación de contraseña (`RD-08`).
+- Autorización verificada del lado del servidor (`[RequiereRol(Administrador)]`
+  + `SesionService`):
+  - Administrador con sesión activa → `200` (o `404` en `{id}` inexistente).
+  - Usuario Estándar → `403 Forbidden`.
+  - Sin cabecera `Authorization`, o con token desconocido, vencido o cerrado →
+    `401 Unauthorized`.
+
+### 6. Evidencia automatizada vs. demostración operativa y pendientes
+
+- **Evidencia automatizada (781 casos en verde con `REQUIERE_PERSISTENCIA=1`):**
+  - `ConfiguracionCorreoTests` (`RF-NOT-13`, `RD-07`, `RD-08`, `RD-10`):
+    lectura de `CorreoSmtp__*`, fallback a `.eml` sin host, validación de
+    remitente/puerto/SSL/credenciales incompletas, envío SMTP real contra un
+    listener TCP local en loopback y redacción de secretos en errores.
+  - `ProcesadorColaCorreosTests` (`RF-NOT-08`, `RF-NOT-09`, `RF-NOT-10`,
+    `RF-NOT-12`): transición exacta de 3 fallos (`Pendiente` → `Pendiente` →
+    `Fallido`) y 4.ª ejecución con 0 llamadas a envío, recuperación antes del
+    3.er fallo conservando `Intentos`, y dos instancias secuenciales sin
+    duplicar envíos.
+  - `CorreosControllerTests` y `CorreosHttpTests` (`RF-NOT-11`, `RD-06`):
+    controlador y pipeline HTTP real (`WebApplicationFactory`) para
+    `GET /api/correos` y `GET /api/correos/{id}`, límite de 200 registros,
+    consulta del correo antiguo #205 por ID, ausencia de `cuerpo`/tokens y
+    rechazo `403` (Estándar) y `401` (sesión ausente, desconocida, vencida o
+    cerrada).
+  - `ColaCorreosPersistenciaTests` y `EventosNotificacionesPersistenciaTests`
+    (`RF-NOT-08` a `RF-NOT-12`, `RD-09`): persistencia real en SQL Server
+    LocalDB con contextos nuevos para no duplicación, 3 fallos + 4.º ciclo sin
+    reintento, límite de 200 y consulta por ID.
+- **Demostración operativa ejecutada en este entorno:**
+  - Se levantó la API compilada (`SistemaDeReservas.API`) en `Production`
+    contra una base limpia en SQL Server LocalDB, con `ColaCorreosWorker`
+    activo y un servidor SMTP de captura en `127.0.0.1`:
+    1. `POST /api/usuarios` + activación + `POST /api/solicitudes-permisos`
+       (`201`) creó la notificación interna `SolicitudPermisoCreada` para el
+       Administrador (`GET /api/notificaciones` → `200`) y entregó 1 solo
+       mensaje SMTP (`MAIL FROM:<no-responder@reservas.local>`,
+       `RCPT TO:<admin@reservas.local>`), quedando `Enviado` con `intentos: 0`
+       y sin duplicarse tras ciclos posteriores del worker.
+    2. Con el servidor SMTP respondiendo `421 Servicio SMTP temporalmente no
+       disponible`, `PUT /api/solicitudes-permisos/{id}/aprobar` terminó en
+       `200` (`estado: "Aplicada"`), creó la notificación interna de Ana y el
+       worker registró `Pendiente (intentos=1)`, `Pendiente (intentos=2)` y
+       `Fallido (intentos=3, fechaEnvio=null, ultimoError="Service not
+       available...")`; un ciclo posterior mantuvo `Fallido` con `intentos=3`
+       consultado en `GET /api/correos/{id}` (`200`).
+    3. Se verificaron por HTTP `GET /api/correos` y `GET /api/correos/{id}` sin
+       sesión (`401`), con token inválido (`401`), con sesión de Estándar
+       (`403`) y con sesión de Administrador (`200`).
+- **Pendiente en el host actual:** el demonio de Docker Desktop
+  (`dockerDesktopLinuxEngine`) no estaba en ejecución en esta máquina al
+  correr la verificación, por lo que la composición `docker-compose.smtp.yml`
+  con el contenedor `axllent/mailpit` quedó preparada y documentada para
+  ejecutarse en cuanto el demonio de Docker esté iniciado.
 
 ## Pruebas
 
@@ -924,43 +1146,43 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **710 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  **736 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
   de correo, de documentos, de evaluación climática, de notificaciones, las
   pruebas de API que invocan los controladores en memoria, las pruebas HTTP
   reales con `WebApplicationFactory`/`TestServer` y el flujo real
   permisos–reservas con repositorios de prueba. Esta parte no necesita base
   de datos ni servidor externo (la evaluación climática usa un transporte
-  falso).
-- **Entorno con persistencia**: los **42 casos de persistencia LocalDB**
+  falso y la prueba SMTP usa un listener local efímero en loopback).
+- **Entorno con persistencia**: los **45 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
   crea su propia base `Reservas_Tests_*`, aplica las migraciones sobre una
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 752 casos salen de **489 métodos de prueba**: 373 `[Fact]`, 74
-`[Theory]` y 42 `[LocalDbFact]`; las teorías se expanden en 337 casos con
+Los 781 casos salen de **509 métodos de prueba**: 387 `[Fact]`, 77
+`[Theory]` y 45 `[LocalDbFact]`; las teorías se expanden en 349 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
-# solo los 42 casos de persistencia LocalDB
+# solo los 45 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 710 casos sin LocalDB
+# solo los 736 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (752).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (781).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
-- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 42
+- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 45
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **752 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **710
-ejecutadas / 0 fallidas / 42 omitidas**.
+Con LocalDB disponible la corrida completa es **781 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **736
+ejecutadas / 0 fallidas / 45 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
 
@@ -978,9 +1200,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 752 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 710 ejecutadas, 0 fallidas, **42 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 752 ejecutadas, **42 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 710 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 781 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 736 ejecutadas, 0 fallidas, **45 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 781 ejecutadas, **45 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 736 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -1006,7 +1228,7 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
 > actual, con las operaciones de la Práctica 3, el Manejador de Documentos de
-> la Práctica 4 y las notificaciones de la Práctica 5, tiene 752
+> la Práctica 4 y las notificaciones de la Práctica 5, tiene 781
 > casos. Los resultados históricos no se reescriben ni se vuelven a atribuir
 > a prácticas posteriores.
 
