@@ -1,5 +1,6 @@
 using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Permissions;
+using SistemaDeReservas.Core.Reports;
 
 namespace SistemaDeReservas.Tests.Fakes;
 
@@ -137,6 +138,36 @@ public sealed class FakeSolicitudPermisoRepository : ISolicitudPermisoRepository
 
         _solicitudes[indice] = solicitud;
         await GuardarEntregasAsync(entregas, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<GrupoSolicitudesPorEstado>> AgruparPorEstadoAsync(
+        DateTime desdeUtcInclusive,
+        DateTime? hastaUtcExclusivo,
+        Guid? solicitanteId,
+        CancellationToken cancellationToken = default)
+    {
+        var consulta = _solicitudes
+            .Where(s => s.CreadaEn >= desdeUtcInclusive);
+
+        if (hastaUtcExclusivo is not null)
+        {
+            var limiteSuperior = hastaUtcExclusivo.Value;
+            consulta = consulta.Where(s => s.CreadaEn < limiteSuperior);
+        }
+
+        if (solicitanteId is not null)
+        {
+            var propietarioId = solicitanteId.Value;
+            consulta = consulta.Where(s => s.SolicitanteId == propietarioId);
+        }
+
+        IReadOnlyList<GrupoSolicitudesPorEstado> resultado = consulta
+            .GroupBy(s => s.Estado)
+            .Select(grupo => new GrupoSolicitudesPorEstado(grupo.Key, grupo.Count()))
+            .OrderBy(grupo => (int)grupo.Estado)
+            .ToList();
+
+        return Task.FromResult(resultado);
     }
 
     private async Task GuardarEntregasAsync(
