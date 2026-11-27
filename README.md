@@ -1199,7 +1199,7 @@ filtradas y agrupadas (`IX_SolicitudesPermiso_CreadaEn_Estado`,
 | Reporte | Ruta | Pregunta que responde | Estados incluidos |
 |---|---|---|---|
 | **Reporte del Core** (`RF-REP-01`) | `GET /api/reportes/solicitudes-por-estado?desde=yyyy-MM-dd&hasta=yyyy-MM-dd` | ¿Cuántas solicitudes de permiso creadas durante el período se encuentran hoy en cada estado? | Estado **actual** persistido (`Pendiente`, `Aprobada`, `Rechazada`, `Aplicada`). **No reconstruye estados históricos** por los que haya transitado una solicitud. |
-| **Reporte del negocio** (`RF-REP-02`, `RF-NEG-08`) | `GET /api/reportes/reservas-por-espacio?desde=yyyy-MM-dd&hasta=yyyy-MM-dd` | ¿Qué espacios concentran más horas de uso efectivo y cuántas reservas confirmadas o finalizadas reciben durante el período? | Exclusivamente `Confirmada` y `Finalizada`. Excluye `Solicitada`, `Rechazada` y `Cancelada`. |
+| **Reporte del negocio** (`RF-REP-02`, `RF-NEG-08`) | `GET /api/reportes/reservas-por-espacio?desde=yyyy-MM-dd&hasta=yyyy-MM-dd` | ¿Qué espacios concentran más horas reservadas y cuántas reservas confirmadas o finalizadas reciben durante el período? | Exclusivamente `Confirmada` y `Finalizada`. Excluye `Solicitada`, `Rechazada` y `Cancelada`. |
 
 - **Grupos vacíos (`D-REP-05`):** se omiten los estados o espacios sin
   registros en el período. Si el rango es válido pero no hay datos, responde
