@@ -1,4 +1,5 @@
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Tests.Fakes;
 
@@ -7,13 +8,17 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 public class CrearSolicitudPermisoServiceTests
 {
     private readonly FakePermisoOtorgadoRepository _permisosOtorgados = new();
+    private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeSolicitudPermisoRepository _solicitudes;
     private readonly CrearSolicitudPermisoService _servicio;
 
     public CrearSolicitudPermisoServiceTests()
     {
         _solicitudes = new FakeSolicitudPermisoRepository(_permisosOtorgados);
-        _servicio = new CrearSolicitudPermisoService(_solicitudes, _permisosOtorgados);
+        _servicio = new CrearSolicitudPermisoService(
+            _solicitudes,
+            _permisosOtorgados,
+            new NotificacionesEventoService(_usuarios));
     }
 
     // RF-GP-01: un usuario Estándar crea la solicitud y esta nace Pendiente,

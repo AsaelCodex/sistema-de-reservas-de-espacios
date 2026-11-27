@@ -1,3 +1,4 @@
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
@@ -8,11 +9,14 @@ namespace SistemaDeReservas.Tests.Reservas;
 public class TransicionReservaServiceTests
 {
     private readonly FakeReservaRepository _reservas = new();
+    private readonly FakeUsuarioRepository _usuarios = new();
     private readonly TransicionReservaService _servicio;
 
     public TransicionReservaServiceTests()
     {
-        _servicio = new TransicionReservaService(_reservas);
+        _servicio = new TransicionReservaService(
+            _reservas,
+            new NotificacionesEventoService(_usuarios));
     }
 
     [Fact]

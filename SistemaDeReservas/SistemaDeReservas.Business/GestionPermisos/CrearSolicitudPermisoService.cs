@@ -1,3 +1,4 @@
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Permissions;
 
 namespace SistemaDeReservas.Business.GestionPermisos;
@@ -6,13 +7,16 @@ public class CrearSolicitudPermisoService
 {
     private readonly ISolicitudPermisoRepository _solicitudes;
     private readonly IPermisoOtorgadoRepository _permisosOtorgados;
+    private readonly NotificacionesEventoService _notificacionesEvento;
 
     public CrearSolicitudPermisoService(
         ISolicitudPermisoRepository solicitudes,
-        IPermisoOtorgadoRepository permisosOtorgados)
+        IPermisoOtorgadoRepository permisosOtorgados,
+        NotificacionesEventoService notificacionesEvento)
     {
         _solicitudes = solicitudes;
         _permisosOtorgados = permisosOtorgados;
+        _notificacionesEvento = notificacionesEvento;
     }
 
     public async Task<ResultadoCreacionSolicitud> CrearAsync(
@@ -50,7 +54,13 @@ public class CrearSolicitudPermisoService
             CreadaEn = DateTime.UtcNow
         };
 
-        await _solicitudes.AgregarAsync(solicitud, cancellationToken);
+        // RF-NOT-01 y D-NOT-09: la solicitud y sus entregas se guardan en una
+        // sola operación. Una solicitud rechazada antes de este punto no crea
+        // notificaciones ni correos.
+        var entregas = await _notificacionesEvento.ParaSolicitudCreadaAsync(
+            solicitud, cancellationToken);
+        await _solicitudes.AgregarConNotificacionesAsync(
+            solicitud, entregas, cancellationToken);
         return ResultadoCreacionSolicitud.Creada(solicitud);
     }
 

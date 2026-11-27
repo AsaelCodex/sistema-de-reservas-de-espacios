@@ -23,4 +23,11 @@ public interface IUsuarioRepository
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Usuario>> ObtenerTodosAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// D-NOT-03: administradores activos que deben recibir el aviso de una
+    /// solicitud nueva. Un administrador inactivo no se incluye.
+    /// </summary>
+    Task<IReadOnlyList<Usuario>> ObtenerAdministradoresActivosAsync(
+        CancellationToken cancellationToken = default);
 }

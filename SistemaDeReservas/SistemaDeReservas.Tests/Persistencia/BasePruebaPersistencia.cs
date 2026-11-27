@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
@@ -160,7 +161,9 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
         Guid aprobadorId)
     {
         await using var contexto = NuevoContexto();
-        var servicio = new ResolucionSolicitudService(new SolicitudPermisoRepository(contexto));
+        var servicio = new ResolucionSolicitudService(
+            new SolicitudPermisoRepository(contexto),
+            new NotificacionesEventoService(new UsuarioRepository(contexto)));
         return await servicio.AprobarAsync(solicitudId, aprobadorId);
     }
 
@@ -170,7 +173,9 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
         string motivo)
     {
         await using var contexto = NuevoContexto();
-        var servicio = new ResolucionSolicitudService(new SolicitudPermisoRepository(contexto));
+        var servicio = new ResolucionSolicitudService(
+            new SolicitudPermisoRepository(contexto),
+            new NotificacionesEventoService(new UsuarioRepository(contexto)));
         return await servicio.RechazarAsync(solicitudId, rechazadorId, motivo);
     }
 
@@ -179,7 +184,8 @@ public abstract class BasePruebaPersistencia : IAsyncLifetime
         await using var contexto = NuevoContexto();
         var servicio = new CrearSolicitudPermisoService(
             new SolicitudPermisoRepository(contexto),
-            new PermisoOtorgadoRepository(contexto));
+            new PermisoOtorgadoRepository(contexto),
+            new NotificacionesEventoService(new UsuarioRepository(contexto)));
         return await servicio.CrearAsync(solicitanteId, "CrearReserva");
     }
 

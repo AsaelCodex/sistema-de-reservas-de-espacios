@@ -1,4 +1,5 @@
 using SistemaDeReservas.Business.ControlAcceso;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Infrastructure.Security;
 using SistemaDeReservas.Tests.Fakes;
 
@@ -149,6 +150,28 @@ public class ActivacionServiceTests
         Assert.Equal(2, _colaCorreos.Correos.Count);
         Assert.Contains(
             $"{UrlPublica}/activar?token={nuevo.Token}", _colaCorreos.Correos[1].Cuerpo);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-NOT-07")]
+    [Trait("Requerimiento", "RF-CA-17")]
+    public async Task Reenviar_WithPreferenceDisabled_StillEnqueuesActivationEmail()
+    {
+        await RegistrarAsync();
+        var usuario = Assert.Single(_usuarios.Usuarios);
+        await _usuarios.ActualizarPreferenciaCorreoAsync(usuario.Id, false);
+        var antes = _colaCorreos.Correos.Count;
+
+        var resultado = await _activacion.ReenviarAsync(Correo);
+
+        Assert.Equal(EstadoReenvio.Enviado, resultado.Estado);
+        Assert.False(usuario.RecibirCorreosNotificacion);
+        Assert.Equal(antes + 1, _colaCorreos.Correos.Count);
+
+        var correo = _colaCorreos.Correos[^1];
+        Assert.Equal(Correo, correo.Destinatario);
+        Assert.Equal(ActivacionCuenta.AsuntoCorreo, correo.Asunto);
+        Assert.Equal(EstadoCorreo.Pendiente, correo.Estado);
     }
 
     [Fact]

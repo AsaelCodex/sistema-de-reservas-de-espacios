@@ -1,4 +1,5 @@
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Tests.Fakes;
@@ -16,7 +17,9 @@ public class AprobarAplicaPermisoTests
     public AprobarAplicaPermisoTests()
     {
         _solicitudes = new FakeSolicitudPermisoRepository(_permisosOtorgados);
-        _resolucion = new ResolucionSolicitudService(_solicitudes);
+        _resolucion = new ResolucionSolicitudService(
+            _solicitudes,
+            new NotificacionesEventoService(_usuarios));
         _autorizacion = new AutorizacionPermisosService(_usuarios, _permisosOtorgados);
     }
 

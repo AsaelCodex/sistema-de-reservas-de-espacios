@@ -1,3 +1,5 @@
+using SistemaDeReservas.Core.Notifications;
+
 namespace SistemaDeReservas.Core.Permissions;
 
 public interface ISolicitudPermisoRepository
@@ -27,5 +29,21 @@ public interface ISolicitudPermisoRepository
     Task GuardarResolucionAsync(
         SolicitudPermiso solicitud,
         PermisoOtorgado permiso,
+        CancellationToken cancellationToken = default);
+
+    // RF-NOT-01, RF-NOT-06 y D-NOT-09: la solicitud y sus entregas se guardan
+    // en un único SaveChanges; si una notificación o un correo falla, no queda
+    // la solicitud.
+    Task AgregarConNotificacionesAsync(
+        SolicitudPermiso solicitud,
+        IReadOnlyList<EntregaNotificacion> entregas,
+        CancellationToken cancellationToken = default);
+
+    // RF-NOT-02 y D-NOT-09: resolución, permiso (si se aprueba) y entregas en
+    // una sola transacción. Para un rechazo, permiso es null.
+    Task GuardarResolucionConNotificacionesAsync(
+        SolicitudPermiso solicitud,
+        PermisoOtorgado? permiso,
+        IReadOnlyList<EntregaNotificacion> entregas,
         CancellationToken cancellationToken = default);
 }

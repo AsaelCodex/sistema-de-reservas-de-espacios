@@ -79,4 +79,14 @@ public class UsuarioRepository : IUsuarioRepository
     {
         return await _context.Usuarios.ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<Usuario>> ObtenerAdministradoresActivosAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.Rol == Rol.Administrador && usuario.Activo)
+            .OrderBy(usuario => usuario.Id)
+            .ToListAsync(cancellationToken);
+    }
 }

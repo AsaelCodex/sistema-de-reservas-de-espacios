@@ -1,3 +1,4 @@
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Reservations;
 
 namespace SistemaDeReservas.Tests.Fakes;
@@ -5,8 +6,22 @@ namespace SistemaDeReservas.Tests.Fakes;
 public sealed class FakeReservaRepository : IReservaRepository
 {
     private readonly List<Reserva> _reservas = new();
+    private readonly FakeNotificacionRepository? _notificaciones;
+    private readonly FakeColaCorreosRepository? _correos;
+
+    public FakeReservaRepository(
+        FakeNotificacionRepository? notificaciones = null,
+        FakeColaCorreosRepository? correos = null)
+    {
+        _notificaciones = notificaciones;
+        _correos = correos;
+    }
 
     public IReadOnlyList<Reserva> Reservas => _reservas;
+
+    public List<Notificacion> NotificacionesCreadas { get; } = new();
+
+    public List<CorreoEnCola> CorreosCreados { get; } = new();
 
     public int Actualizaciones { get; private set; }
 
@@ -74,6 +89,32 @@ public sealed class FakeReservaRepository : IReservaRepository
         _reservas[indice] = reserva;
         Actualizaciones++;
         return Task.CompletedTask;
+    }
+
+    public async Task ActualizarConNotificacionesAsync(
+        Reserva reserva,
+        IReadOnlyList<EntregaNotificacion> entregas,
+        CancellationToken cancellationToken = default)
+    {
+        await ActualizarAsync(reserva, cancellationToken);
+
+        foreach (var entrega in entregas)
+        {
+            NotificacionesCreadas.Add(entrega.Notificacion);
+            if (_notificaciones is not null)
+            {
+                await _notificaciones.AgregarAsync(entrega.Notificacion, cancellationToken);
+            }
+
+            if (entrega.Correo is not null)
+            {
+                CorreosCreados.Add(entrega.Correo);
+                if (_correos is not null)
+                {
+                    await _correos.EncolarAsync(entrega.Correo, cancellationToken);
+                }
+            }
+        }
     }
 
     private static List<Reserva> Ordenar(IEnumerable<Reserva> reservas)
