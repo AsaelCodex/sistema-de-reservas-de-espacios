@@ -11,6 +11,7 @@ using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.Clima;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
@@ -57,7 +58,9 @@ public class ReservasControllerTests
                 _reservas,
                 new AutorizacionPermisosService(_usuarios, _permisos)),
             new ListadoReservasService(_reservas),
-            new TransicionReservaService(_reservas),
+            new TransicionReservaService(
+                _reservas,
+                new NotificacionesEventoService(_usuarios)),
             new EvaluacionClimaticaService(
                 _reservas, _clima, _reloj, OpcionesClima),
             _sesion);

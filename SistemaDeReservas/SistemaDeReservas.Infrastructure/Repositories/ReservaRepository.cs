@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Infrastructure.Data;
 
@@ -126,6 +127,27 @@ public class ReservaRepository : IReservaRepository
     public async Task ActualizarAsync(Reserva reserva, CancellationToken cancellationToken = default)
     {
         _context.Reservas.Update(reserva);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ActualizarConNotificacionesAsync(
+        Reserva reserva,
+        IReadOnlyList<EntregaNotificacion> entregas,
+        CancellationToken cancellationToken = default)
+    {
+        _context.Reservas.Update(reserva);
+
+        foreach (var entrega in entregas)
+        {
+            _context.Notificaciones.Add(entrega.Notificacion);
+            if (entrega.Correo is not null)
+            {
+                _context.CorreosEnCola.Add(entrega.Correo);
+            }
+        }
+
+        // Un solo SaveChanges: el estado de la reserva y la entrega se
+        // confirman juntos o se revierten juntos (D-NOT-09).
         await _context.SaveChangesAsync(cancellationToken);
     }
 

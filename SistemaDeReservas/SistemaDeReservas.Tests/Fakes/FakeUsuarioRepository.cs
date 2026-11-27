@@ -71,4 +71,14 @@ public sealed class FakeUsuarioRepository : IUsuarioRepository
         IReadOnlyList<Usuario> usuarios = _usuarios.ToList();
         return Task.FromResult(usuarios);
     }
+
+    public Task<IReadOnlyList<Usuario>> ObtenerAdministradoresActivosAsync(
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Usuario> administradores = _usuarios
+            .Where(usuario => usuario.Rol == Rol.Administrador && usuario.Activo)
+            .OrderBy(usuario => usuario.Id)
+            .ToList();
+        return Task.FromResult(administradores);
+    }
 }

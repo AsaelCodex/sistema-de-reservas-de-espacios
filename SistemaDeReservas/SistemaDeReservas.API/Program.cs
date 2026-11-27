@@ -199,6 +199,7 @@ builder.Services.AddScoped<ListadoCorreosService>();
 builder.Services.AddScoped<ListadoNotificacionesService>();
 builder.Services.AddScoped<MarcarNotificacionLeidaService>();
 builder.Services.AddScoped<PreferenciaNotificacionesService>();
+builder.Services.AddScoped<NotificacionesEventoService>();
 builder.Services.AddScoped<CrearSolicitudPermisoService>();
 builder.Services.AddScoped<ListadoSolicitudesService>();
 builder.Services.AddScoped<ResolucionSolicitudService>();

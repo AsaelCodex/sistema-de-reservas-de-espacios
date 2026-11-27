@@ -10,6 +10,7 @@ using SistemaDeReservas.API.Controllers;
 using SistemaDeReservas.API.Models;
 using SistemaDeReservas.Business.ControlAcceso;
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Users;
 using SistemaDeReservas.Infrastructure.Security;
@@ -30,11 +31,13 @@ public class SolicitudesPermisosTests
     {
         _solicitudes = new FakeSolicitudPermisoRepository(_permisosOtorgados);
         var sesion = new SesionService(_usuarios, new Pbkdf2PasswordHasher(), _sesiones);
+        var notificacionesEvento = new NotificacionesEventoService(_usuarios);
         _controller = new SolicitudesPermisosController(
-            new CrearSolicitudPermisoService(_solicitudes, _permisosOtorgados),
+            new CrearSolicitudPermisoService(
+                _solicitudes, _permisosOtorgados, notificacionesEvento),
             sesion,
             new ListadoSolicitudesService(_solicitudes),
-            new ResolucionSolicitudService(_solicitudes));
+            new ResolucionSolicitudService(_solicitudes, notificacionesEvento));
         _filtro = new AutorizacionRolFilter(sesion);
     }
 

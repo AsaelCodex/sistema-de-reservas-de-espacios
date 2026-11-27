@@ -1,3 +1,5 @@
+using SistemaDeReservas.Business.Notificaciones;
+using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Reservations;
 
 namespace SistemaDeReservas.Business.Reservas;
@@ -5,10 +7,14 @@ namespace SistemaDeReservas.Business.Reservas;
 public class TransicionReservaService
 {
     private readonly IReservaRepository _reservas;
+    private readonly NotificacionesEventoService _notificacionesEvento;
 
-    public TransicionReservaService(IReservaRepository reservas)
+    public TransicionReservaService(
+        IReservaRepository reservas,
+        NotificacionesEventoService notificacionesEvento)
     {
         _reservas = reservas;
+        _notificacionesEvento = notificacionesEvento;
     }
 
     /// <summary>
@@ -46,8 +52,20 @@ public class TransicionReservaService
             return ResultadoTransicionReserva.CondicionIncumplida(reserva.Estado, destino);
         }
 
+        var estadoOrigen = reserva.Estado;
         reserva.Estado = destino;
-        await _reservas.ActualizarAsync(reserva, cancellationToken);
+
+        // RF-NOT-03 y D-NOT-06: solo la confirmación válida de una reserva
+        // dispara la notificación al propietario. Las demás transiciones no
+        // generan entrega.
+        IReadOnlyList<EntregaNotificacion> entregas =
+            estadoOrigen == EstadoReserva.Solicitada && destino == EstadoReserva.Confirmada
+                ? await _notificacionesEvento.ParaReservaConfirmadaAsync(
+                    reserva, DateTime.UtcNow, cancellationToken)
+                : Array.Empty<EntregaNotificacion>();
+
+        await _reservas.ActualizarConNotificacionesAsync(
+            reserva, entregas, cancellationToken);
 
         return ResultadoTransicionReserva.Transicionada(reserva);
     }

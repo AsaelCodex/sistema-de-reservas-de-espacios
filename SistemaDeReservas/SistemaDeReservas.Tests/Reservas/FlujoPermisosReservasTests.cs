@@ -1,4 +1,5 @@
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Business.Reservas;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
@@ -29,8 +30,11 @@ public class FlujoPermisosReservasTests
         var permisos = new FakePermisoOtorgadoRepository();
         var solicitudes = new FakeSolicitudPermisoRepository(permisos);
         var reservas = new FakeReservaRepository();
-        var crearSolicitud = new CrearSolicitudPermisoService(solicitudes, permisos);
-        var resolverSolicitud = new ResolucionSolicitudService(solicitudes);
+        var notificacionesEvento = new NotificacionesEventoService(usuarios);
+        var crearSolicitud = new CrearSolicitudPermisoService(
+            solicitudes, permisos, notificacionesEvento);
+        var resolverSolicitud = new ResolucionSolicitudService(
+            solicitudes, notificacionesEvento);
         var autorizacion = new AutorizacionPermisosService(usuarios, permisos);
         var crearReserva = new CrearReservaService(reservas, autorizacion);
 

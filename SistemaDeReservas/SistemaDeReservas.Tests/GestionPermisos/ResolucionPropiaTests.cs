@@ -1,4 +1,5 @@
 using SistemaDeReservas.Business.GestionPermisos;
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Tests.Fakes;
 
@@ -7,13 +8,16 @@ namespace SistemaDeReservas.Tests.GestionPermisos;
 public class ResolucionPropiaTests
 {
     private readonly FakePermisoOtorgadoRepository _permisosOtorgados = new();
+    private readonly FakeUsuarioRepository _usuarios = new();
     private readonly FakeSolicitudPermisoRepository _solicitudes;
     private readonly ResolucionSolicitudService _servicio;
 
     public ResolucionPropiaTests()
     {
         _solicitudes = new FakeSolicitudPermisoRepository(_permisosOtorgados);
-        _servicio = new ResolucionSolicitudService(_solicitudes);
+        _servicio = new ResolucionSolicitudService(
+            _solicitudes,
+            new NotificacionesEventoService(_usuarios));
     }
 
     // RF-GP-07: un Administrador no puede aprobar su propia solicitud; la fila

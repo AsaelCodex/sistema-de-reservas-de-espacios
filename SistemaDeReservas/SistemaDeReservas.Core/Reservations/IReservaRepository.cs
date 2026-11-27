@@ -1,3 +1,5 @@
+using SistemaDeReservas.Core.Notifications;
+
 namespace SistemaDeReservas.Core.Reservations;
 
 public interface IReservaRepository
@@ -31,4 +33,10 @@ public interface IReservaRepository
         CancellationToken cancellationToken = default);
 
     Task ActualizarAsync(Reserva reserva, CancellationToken cancellationToken = default);
+
+    // RF-NOT-03 y D-NOT-09: el cambio de estado y la entrega se guardan juntos.
+    Task ActualizarConNotificacionesAsync(
+        Reserva reserva,
+        IReadOnlyList<EntregaNotificacion> entregas,
+        CancellationToken cancellationToken = default);
 }

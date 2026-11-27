@@ -1,3 +1,4 @@
+using SistemaDeReservas.Business.Notificaciones;
 using SistemaDeReservas.Core.Permissions;
 
 namespace SistemaDeReservas.Business.GestionPermisos;
@@ -5,10 +6,14 @@ namespace SistemaDeReservas.Business.GestionPermisos;
 public class ResolucionSolicitudService
 {
     private readonly ISolicitudPermisoRepository _solicitudes;
+    private readonly NotificacionesEventoService _notificacionesEvento;
 
-    public ResolucionSolicitudService(ISolicitudPermisoRepository solicitudes)
+    public ResolucionSolicitudService(
+        ISolicitudPermisoRepository solicitudes,
+        NotificacionesEventoService notificacionesEvento)
     {
         _solicitudes = solicitudes;
+        _notificacionesEvento = notificacionesEvento;
     }
 
     public async Task<ResultadoResolucionSolicitud> AprobarAsync(
@@ -48,17 +53,23 @@ public class ResolucionSolicitudService
         solicitud.ResueltaEn = resueltaEn;
         solicitud.Estado = EstadoSolicitudPermiso.Aplicada;
 
-        // RF-GP-05: aprobar otorga el permiso solicitado. Solicitud y permiso se
-        // persisten en una sola operación atómica: si el permiso no puede
-        // almacenarse, la solicitud tampoco cambia de estado.
-        await _solicitudes.GuardarResolucionAsync(solicitud, new PermisoOtorgado
-        {
-            Id = Guid.NewGuid(),
-            UsuarioId = solicitud.SolicitanteId,
-            Permiso = solicitud.Permiso,
-            SolicitudPermisoId = solicitud.Id,
-            OtorgadoEn = resueltaEn
-        }, cancellationToken);
+        // RF-GP-05: aprobar otorga el permiso solicitado. Solicitud, permiso y
+        // entrega se persisten en una sola operación atómica: si cualquiera no
+        // puede almacenarse, la solicitud tampoco cambia de estado (D-NOT-09).
+        var entregas = await _notificacionesEvento.ParaSolicitudAprobadaAsync(
+            solicitud, cancellationToken);
+        await _solicitudes.GuardarResolucionConNotificacionesAsync(
+            solicitud,
+            new PermisoOtorgado
+            {
+                Id = Guid.NewGuid(),
+                UsuarioId = solicitud.SolicitanteId,
+                Permiso = solicitud.Permiso,
+                SolicitudPermisoId = solicitud.Id,
+                OtorgadoEn = resueltaEn
+            },
+            entregas,
+            cancellationToken);
 
         return ResultadoResolucionSolicitud.Aprobada(solicitud);
     }
@@ -108,7 +119,12 @@ public class ResolucionSolicitudService
         solicitud.ResueltaEn = DateTime.UtcNow;
         solicitud.MotivoRechazo = motivo.Trim();
 
-        await _solicitudes.ActualizarAsync(solicitud, cancellationToken);
+        // RF-NOT-02 y D-NOT-09: el rechazo y su entrega se guardan juntos; el
+        // motivo que se notifica es exactamente el valor persistido.
+        var entregas = await _notificacionesEvento.ParaSolicitudRechazadaAsync(
+            solicitud, cancellationToken);
+        await _solicitudes.GuardarResolucionConNotificacionesAsync(
+            solicitud, null, entregas, cancellationToken);
 
         return ResultadoResolucionSolicitud.Rechazada(solicitud);
     }
