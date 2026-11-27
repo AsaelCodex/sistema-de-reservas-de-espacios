@@ -58,11 +58,11 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
   El detalle y la evidencia están en `docs/matriz-requisitos.md`. La
   comprobación final desde un clon limpio (P4-04) está en
   `docs/practica-4-cierre.md`.
-- **Pruebas:** 745 casos en verde (482 métodos de prueba, las teorías se
-  expanden): 707 casos sin LocalDB —negocio con fakes, seguridad, correo,
+- **Pruebas:** 752 casos en verde (489 métodos de prueba, las teorías se
+  expanden): 710 casos sin LocalDB —negocio con fakes, seguridad, correo,
   documentos, evaluación climática, notificaciones, controladores invocados
   en memoria, pruebas HTTP con `WebApplicationFactory` y el flujo real
-  permisos–reservas con repositorios de prueba— y 38 casos de persistencia
+  permisos–reservas con repositorios de prueba— y 42 casos de persistencia
   sobre SQL Server LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una
   base propia por prueba que se elimina al terminar.
 - **Endpoints:**
@@ -105,18 +105,16 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
 | `GET /api/documentos/{id}/contenido` | Descargar el contenido (403 si es de otro Estándar) | Autenticado |
 | `DELETE /api/documentos/{id}` | Eliminación lógica (204; 403 si es de otro Estándar) | Autenticado |
 
-- **Pendiente (piezas posteriores):** RF-DOC-06 (auditoría),
-  integración de eventos y encolado de notificaciones (RF-NOT-01 a
-  RF-NOT-03, RF-NOT-06 y la parte de RF-NOT-07 que decide si se encola
-  correo), Reportes (RF-REP), Auditoría (RF-AUD) y el resto del módulo de
-  negocio (RF-NEG-01, RF-NEG-07, RF-NEG-08 y RF-NEG-10).
+- **Pendiente (piezas posteriores):** RF-DOC-06 (auditoría), Reportes
+  (RF-REP), Auditoría (RF-AUD) y el resto del módulo de negocio (RF-NEG-01,
+  RF-NEG-08 y RF-NEG-10).
 
 ## Requisitos
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` debe mostrar 10.x)
 - Git
 - SQL Server (LocalDB, Express o superior) para ejecutar la API y para
-  las 19 pruebas de persistencia (si no está disponible, esas pruebas se
+  las 42 pruebas de persistencia (si no está disponible, esas pruebas se
   omiten con el motivo; ver «Pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
@@ -699,13 +697,21 @@ La bandeja interna y la preferencia de correo se persisten en la tabla
 (migración `AddNotificacionesYPreferenciaCorreo`). La preferencia parte en
 `true` para usuarios nuevos y existentes.
 
-Cada evento de negocio genera siempre una **notificación interna** para su
-destinatario y, solo si la preferencia persistida de ese usuario está activa,
-un `CorreoEnCola` en estado `Pendiente`. La notificación y el correo se
+Cada evento de negocio genera una **notificación interna** para su
+destinatario (o para cada Administrador activo, al crear una solicitud) y,
+solo si la preferencia persistida de ese usuario está activa, un
+`CorreoEnCola` en estado `Pendiente`. La notificación y el correo se
 guardan en la **misma transacción** que la operación de origen: si una parte
 falla, no queda ni la solicitud, ni el cambio de estado, ni la entrega
 parcial. El negocio nunca envía correo directamente; el worker existente
 (`ColaCorreosWorker`) es el único que llama a `IEnvioCorreo`.
+
+Las pruebas de atomicidad usan SQL Server LocalDB y un contexto de prueba con
+`MaxBatchSize(1)`: EF emite un comando por escritura, el interceptor registra
+las que ya se ejecutaron dentro de la transacción y fuerza el fallo en la
+última escritura de la operación. Después, un contexto nuevo comprueba que no
+sobrevivió ninguna fila (solicitud, estado, permiso, notificación o correo).
+No se modifica la configuración de producción para estas pruebas.
 
 | Evento | Destinatario | Tipo interno |
 |---|---|---|
@@ -829,7 +835,8 @@ Authorization: Bearer <token>
 - La actualización se ejecuta como un `UPDATE` condicionado por `Leida = 0`
   y modifica solo `Leida` y `LeidaEn`; no reescribe el mensaje, el tipo, el
   destinatario ni la fecha de creación. Con dos marcados concurrentes, solo
-  uno afecta la fila y sobrevive la primera fecha.
+  uno afecta la fila y sobrevive la fecha de ese marcado; el segundo no la
+  sobrescribe.
 - Códigos: `200` marcada o ya leída, `401` sin sesión válida, `403`
   notificación existente de otro usuario y `404` notificación inexistente.
   En `403` y `404` no se expone el contenido de la notificación.
@@ -917,43 +924,43 @@ Cada prueba declara el requisito que verifica con
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **707 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  **710 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
   de correo, de documentos, de evaluación climática, de notificaciones, las
   pruebas de API que invocan los controladores en memoria, las pruebas HTTP
   reales con `WebApplicationFactory`/`TestServer` y el flujo real
   permisos–reservas con repositorios de prueba. Esta parte no necesita base
   de datos ni servidor externo (la evaluación climática usa un transporte
   falso).
-- **Entorno con persistencia**: los **38 casos de persistencia LocalDB**
+- **Entorno con persistencia**: los **42 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
   crea su propia base `Reservas_Tests_*`, aplica las migraciones sobre una
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 745 casos salen de **482 métodos de prueba**: 370 `[Fact]`, 74
-`[Theory]` y 38 `[LocalDbFact]`; las teorías se expanden en 337 casos con
+Los 752 casos salen de **489 métodos de prueba**: 373 `[Fact]`, 74
+`[Theory]` y 42 `[LocalDbFact]`; las teorías se expanden en 337 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
-# solo los 38 casos de persistencia LocalDB
+# solo los 42 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 707 casos sin LocalDB
+# solo los 710 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (745).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (752).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
-- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 38
+- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 42
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **745 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **707
-ejecutadas / 0 fallidas / 38 omitidas**.
+Con LocalDB disponible la corrida completa es **752 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **710
+ejecutadas / 0 fallidas / 42 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
 
@@ -971,9 +978,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 745 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 707 ejecutadas, 0 fallidas, **38 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 745 ejecutadas, **38 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 707 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 752 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 710 ejecutadas, 0 fallidas, **42 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 752 ejecutadas, **42 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 710 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
@@ -999,7 +1006,7 @@ Remove-Item Env:LOCALDB_PROBE_DATASOURCE
 > Los conteos de esta sección (**303 casos**) corresponden a la suite de la
 > Práctica 2 en el momento en que se verificaron esos defectos. La suite
 > actual, con las operaciones de la Práctica 3, el Manejador de Documentos de
-> la Práctica 4 y las notificaciones de la Práctica 5, tiene 745
+> la Práctica 4 y las notificaciones de la Práctica 5, tiene 752
 > casos. Los resultados históricos no se reescriben ni se vuelven a atribuir
 > a prácticas posteriores.
 
