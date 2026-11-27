@@ -39,13 +39,81 @@ public class ProcesadorColaCorreosTests
     [Trait("Requerimiento", "RF-NOT-12")]
     public async Task Procesar_Twice_DoesNotSendTheSameEmailAgain()
     {
-        await EncolarAsync("ana@itla.edu.do");
+        var correo = await EncolarAsync("ana@itla.edu.do");
 
-        await _procesador.ProcesarAsync();
-        await _procesador.ProcesarAsync();
+        var primera = await _procesador.ProcesarAsync();
+        var fechaEnvio = correo.FechaEnvio;
+        var segunda = await _procesador.ProcesarAsync();
 
+        Assert.Equal(1, primera);
+        Assert.Equal(0, segunda);
+        Assert.NotNull(fechaEnvio);
+        Assert.Equal(fechaEnvio, correo.FechaEnvio);
         Assert.Single(_envio.Enviados);
         Assert.Equal(1, _cola.Correos.Count(c => c.Estado == EstadoCorreo.Enviado));
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-NOT-12")]
+    public async Task Procesar_TwoSequentialProcessorInstances_DoNotDuplicateDelivery()
+    {
+        var correo = await EncolarAsync("ana@itla.edu.do");
+        var primerProcesador = new ProcesadorColaCorreos(_cola, _envio);
+        var segundoProcesador = new ProcesadorColaCorreos(_cola, _envio);
+
+        var primera = await primerProcesador.ProcesarAsync();
+        var fechaPrimera = correo.FechaEnvio;
+        var segunda = await segundoProcesador.ProcesarAsync();
+
+        Assert.Equal(1, primera);
+        Assert.Equal(0, segunda);
+        Assert.Single(_envio.Enviados);
+        Assert.Equal(EstadoCorreo.Enviado, correo.Estado);
+        Assert.Equal(0, correo.Intentos);
+        Assert.Equal(fechaPrimera, correo.FechaEnvio);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-NOT-10")]
+    public async Task Procesar_ThreeSequentialFailures_TransitionsPendienteToFallidoAndFourthDoesNotRetry()
+    {
+        var correo = await EncolarAsync("ana@itla.edu.do");
+        var llamadasEnvio = 0;
+        var envioFallido = new EnvioConContador(() =>
+        {
+            llamadasEnvio++;
+            throw new InvalidOperationException($"Fallo SMTP #{llamadasEnvio}");
+        });
+        var procesador = new ProcesadorColaCorreos(_cola, envioFallido);
+
+        // 1.er fallo: sigue Pendiente, Intentos = 1
+        Assert.Equal(0, await procesador.ProcesarAsync());
+        Assert.Equal(EstadoCorreo.Pendiente, correo.Estado);
+        Assert.Equal(1, correo.Intentos);
+        Assert.Equal("Fallo SMTP #1", correo.UltimoError);
+        Assert.Null(correo.FechaEnvio);
+
+        // 2.º fallo: sigue Pendiente, Intentos = 2
+        Assert.Equal(0, await procesador.ProcesarAsync());
+        Assert.Equal(EstadoCorreo.Pendiente, correo.Estado);
+        Assert.Equal(2, correo.Intentos);
+        Assert.Equal("Fallo SMTP #2", correo.UltimoError);
+        Assert.Null(correo.FechaEnvio);
+
+        // 3.er fallo: pasa a Fallido, Intentos = 3
+        Assert.Equal(0, await procesador.ProcesarAsync());
+        Assert.Equal(EstadoCorreo.Fallido, correo.Estado);
+        Assert.Equal(3, correo.Intentos);
+        Assert.Equal("Fallo SMTP #3", correo.UltimoError);
+        Assert.Null(correo.FechaEnvio);
+
+        // 4.ª ejecución: ya no es candidato porque solo se consultan Pendiente
+        Assert.Equal(0, await procesador.ProcesarAsync());
+        Assert.Equal(3, llamadasEnvio);
+        Assert.Equal(EstadoCorreo.Fallido, correo.Estado);
+        Assert.Equal(3, correo.Intentos);
+        Assert.Equal("Fallo SMTP #3", correo.UltimoError);
+        Assert.Null(correo.FechaEnvio);
     }
 
     [Fact]
@@ -67,6 +135,8 @@ public class ProcesadorColaCorreosTests
         await _procesador.ProcesarAsync();
 
         Assert.Equal(EstadoCorreo.Enviado, correo.Estado);
+        Assert.Equal(1, correo.Intentos);
+        Assert.Null(correo.UltimoError);
         Assert.NotNull(correo.FechaEnvio);
     }
 
@@ -129,5 +199,21 @@ public class ProcesadorColaCorreosTests
         };
         await _cola.EncolarAsync(correo);
         return correo;
+    }
+
+    private sealed class EnvioConContador : IEnvioCorreo
+    {
+        private readonly Action _accion;
+
+        public EnvioConContador(Action accion)
+        {
+            _accion = accion;
+        }
+
+        public Task EnviarAsync(CorreoEnCola correo, CancellationToken cancellationToken = default)
+        {
+            _accion();
+            return Task.CompletedTask;
+        }
     }
 }

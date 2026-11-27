@@ -18,4 +18,11 @@ public class ListadoCorreosService
     {
         return _cola.ObtenerTodasAsync(LimiteListado, cancellationToken);
     }
+
+    public Task<CorreoEnCola?> ObtenerPorIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        return _cola.ObtenerPorIdAsync(id, cancellationToken);
+    }
 }

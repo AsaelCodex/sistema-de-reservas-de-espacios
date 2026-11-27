@@ -119,6 +119,10 @@ if (diasPronosticoClima is < 1 or > 14)
 
 var weatherApiKey = builder.Configuration["WeatherApi:ApiKey"] ?? string.Empty;
 
+// RF-NOT-13 y RD-07: validar la configuración SMTP al iniciar; sin
+// CorreoSmtp:Host se conserva el respaldo a archivos .eml.
+var configuracionCorreo = ConfiguracionCorreoSmtp.LeerYValidar(builder.Configuration);
+
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
@@ -144,38 +148,8 @@ builder.Services.AddScoped<INotificacionRepository, NotificacionRepository>();
 builder.Services.AddSingleton<IAlmacenDocumentos>(
     _ => new AlmacenArchivosDocumentos(rutaDocumentos));
 builder.Services.AddSingleton<IEnvioCorreo>(sp =>
-{
-    var smtpHost = builder.Configuration["CorreoSmtp:Host"];
-    if (!string.IsNullOrEmpty(smtpHost))
-    {
-        var smtpRemitente = builder.Configuration["CorreoSmtp:De"];
-        if (string.IsNullOrEmpty(smtpRemitente))
-        {
-            throw new InvalidOperationException("CorreoSmtp:De configuration is not set");
-        }
-
-        var puerto = int.TryParse(builder.Configuration["CorreoSmtp:Puerto"], out var puertoValor)
-            ? puertoValor
-            : 587;
-        var ssl = bool.TryParse(builder.Configuration["CorreoSmtp:Ssl"], out var sslValor) && sslValor;
-
-        return new SmtpEnvioCorreo(
-            smtpHost,
-            puerto,
-            builder.Configuration["CorreoSmtp:Usuario"],
-            builder.Configuration["CorreoSmtp:Password"],
-            smtpRemitente,
-            ssl);
-    }
-
-    var directorio = builder.Configuration["App:DirectorioCorreos"] ?? "correo-salida";
-    sp.GetRequiredService<ILoggerFactory>()
-        .CreateLogger("Correos")
-        .LogWarning(
-            "SMTP no configurado (CorreoSmtp:Host); los correos se guardarán en {Directorio}",
-            directorio);
-    return new ArchivoEnvioCorreo(directorio);
-});
+    configuracionCorreo.CrearEnvioCorreo(
+        sp.GetRequiredService<ILoggerFactory>()));
 builder.Services.AddScoped(sp => new RegistroUsuarioService(
     sp.GetRequiredService<IUsuarioRepository>(),
     sp.GetRequiredService<IPasswordHasher>(),

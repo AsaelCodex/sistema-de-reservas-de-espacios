@@ -30,9 +30,17 @@ public sealed class FakeColaCorreosRepository : IColaCorreosRepository
     {
         IReadOnlyList<CorreoEnCola> resultado = _correos
             .OrderByDescending(correo => correo.FechaCreacion)
+            .ThenBy(correo => correo.Id)
             .Take(limite)
             .ToList();
         return Task.FromResult(resultado);
+    }
+
+    public Task<CorreoEnCola?> ObtenerPorIdAsync(
+        Guid id, CancellationToken cancellationToken = default)
+    {
+        var correo = _correos.FirstOrDefault(c => c.Id == id);
+        return Task.FromResult(correo);
     }
 
     public Task ActualizarAsync(CorreoEnCola correo, CancellationToken cancellationToken = default)

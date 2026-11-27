@@ -70,6 +70,91 @@ public class CorreosControllerTests
 
     [Fact]
     [Trait("Requerimiento", "RF-NOT-11")]
+    public async Task Get_CapsListAtTwoHundredAndGetPorIdRetrievesOlderEmailWithoutBody()
+    {
+        var baseFecha = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var antiguo = new CorreoEnCola
+        {
+            Id = Guid.NewGuid(),
+            Destinatario = "antiguo@itla.edu.do",
+            Asunto = "Correo antiguo fuera de los 200",
+            Cuerpo = "activar?token=TOKEN_SECRETO_NO_EXPONER",
+            Estado = EstadoCorreo.Fallido,
+            Intentos = 3,
+            FechaCreacion = baseFecha,
+            UltimoError = "Host SMTP inalcanzable"
+        };
+        await _cola.EncolarAsync(antiguo);
+
+        for (var indice = 1; indice <= ListadoCorreosService.LimiteListado + 4; indice++)
+        {
+            await _cola.EncolarAsync(new CorreoEnCola
+            {
+                Id = Guid.NewGuid(),
+                Destinatario = $"reciente-{indice}@itla.edu.do",
+                Asunto = $"Reciente {indice}",
+                Cuerpo = "Cuerpo con código 123456",
+                Estado = EstadoCorreo.Enviado,
+                Intentos = 0,
+                FechaCreacion = baseFecha.AddMinutes(indice),
+                FechaEnvio = baseFecha.AddMinutes(indice).AddSeconds(5)
+            });
+        }
+
+        var resultadoLista = await _controller.Get(CancellationToken.None);
+        var respuestaLista = Assert.IsAssignableFrom<ObjectResult>(resultadoLista);
+        using var documentoLista = JsonDocument.Parse(
+            JsonSerializer.Serialize(respuestaLista.Value));
+        var elementos = documentoLista.RootElement.EnumerateArray().ToList();
+
+        Assert.Equal(ListadoCorreosService.LimiteListado, elementos.Count);
+        Assert.DoesNotContain(
+            elementos,
+            elemento => elemento.GetProperty("id").GetGuid() == antiguo.Id);
+
+        var resultadoDetalle = await _controller.GetPorId(antiguo.Id, CancellationToken.None);
+        var respuestaDetalle = Assert.IsAssignableFrom<ObjectResult>(resultadoDetalle);
+        Assert.Equal(StatusCodes.Status200OK, respuestaDetalle.StatusCode);
+
+        var jsonDetalle = JsonSerializer.Serialize(respuestaDetalle.Value);
+        Assert.Contains(antiguo.Id.ToString(), jsonDetalle);
+        Assert.Contains("antiguo@itla.edu.do", jsonDetalle);
+        Assert.Contains("Fallido", jsonDetalle);
+        Assert.Contains("Host SMTP inalcanzable", jsonDetalle);
+        Assert.DoesNotContain("TOKEN_SECRETO_NO_EXPONER", jsonDetalle);
+        Assert.DoesNotContain("cuerpo", jsonDetalle, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-NOT-11")]
+    public async Task GetPorId_WhenEmailDoesNotExist_ReturnsNotFound()
+    {
+        var resultado = await _controller.GetPorId(Guid.NewGuid(), CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status404NotFound, respuesta.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-NOT-11")]
+    [Trait("Requerimiento", "RD-06")]
+    public async Task GetPorId_WithoutSessionOrAsEstandar_IsRejectedByServer()
+    {
+        var sinSesion = Contexto(null, AccionDetalle());
+        await _filtro.OnAuthorizationAsync(sinSesion);
+        var respuestaSinSesion = Assert.IsType<ObjectResult>(sinSesion.Result);
+        Assert.Equal(StatusCodes.Status401Unauthorized, respuestaSinSesion.StatusCode);
+
+        var estandar = await CrearUsuarioAsync(Rol.Estandar);
+        var token = await AbrirSesionAsync(estandar);
+        var comoEstandar = Contexto($"Bearer {token}", AccionDetalle());
+        await _filtro.OnAuthorizationAsync(comoEstandar);
+        var respuestaEstandar = Assert.IsType<ObjectResult>(comoEstandar.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, respuestaEstandar.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Requerimiento", "RF-NOT-11")]
     public async Task Get_WithoutSession_ReturnsUnauthorized()
     {
         var contexto = Contexto(null, AccionListado());
@@ -146,6 +231,9 @@ public class CorreosControllerTests
 
     private static MethodInfo AccionListado() =>
         typeof(CorreosController).GetMethod(nameof(CorreosController.Get))!;
+
+    private static MethodInfo AccionDetalle() =>
+        typeof(CorreosController).GetMethod(nameof(CorreosController.GetPorId))!;
 
     private static AuthorizationFilterContext Contexto(string? autorizacion, MethodInfo accion)
     {

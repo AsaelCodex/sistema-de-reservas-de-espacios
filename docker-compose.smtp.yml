@@ -1,0 +1,34 @@
+# P5-04: composición adicional opcional para demostrar el envío SMTP real
+# usando un servidor de captura local (Mailpit), sin cuentas ni credenciales
+# externas y sin alterar el arranque normal en modo .eml.
+#
+# Selecciona deliberadamente el servidor local de captura (mailpit:1025, sin
+# credenciales ni SSL), sin heredar puertos ni credenciales de un SMTP externo
+# que pudieran estar definidos en .env.
+#
+# Arranque aislado:
+#   docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml up --build -d
+# Interfaz web / API de Mailpit (solo en loopback):
+#   http://localhost:8025
+# Detener o reactivar solo Mailpit (manteniendo API y SQL Server activos):
+#   docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml stop mailpit
+#   docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml start mailpit
+# Limpieza de la demostración:
+#   docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml down -v
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025"
+
+  api:
+    depends_on:
+      mailpit:
+        condition: service_started
+    environment:
+      CorreoSmtp__Host: "mailpit"
+      CorreoSmtp__Puerto: "1025"
+      CorreoSmtp__Usuario: ""
+      CorreoSmtp__Password: ""
+      CorreoSmtp__De: "no-responder@reservas.local"
+      CorreoSmtp__Ssl: "false"

@@ -157,7 +157,8 @@ este commit exige actualizar este documento antes de implementar.
 | `PUT /api/notificaciones/{id}/leida` | Marca una notificación propia como leída. | Autenticado |
 | `GET /api/usuarios/yo/notificaciones-correo` | Consulta la preferencia propia. | Autenticado |
 | `PUT /api/usuarios/yo/notificaciones-correo` | Activa o desactiva el correo de notificaciones propio. Cuerpo: `{ "habilitado": true }`. | Autenticado |
-| `GET /api/correos` | Consulta la cola (ya existente). | Administrador |
+| `GET /api/correos` | Consulta la cola (hasta los 200 más recientes). | Administrador |
+| `GET /api/correos/{id}` | Consulta un correo específico de la cola por identificador (permite consultar correos antiguos fuera del límite de 200, sin exponer el cuerpo). | Administrador |
 | `GET /api/reportes/solicitudes-por-estado?desde=...&hasta=...` | Reporte del Core. | Autenticado |
 | `GET /api/reportes/reservas-por-espacio?desde=...&hasta=...` | Reporte del negocio. | Autenticado |
 
@@ -620,13 +621,20 @@ consultar la cola y saber qué pasó con cualquier correo.
   falló.
 - La respuesta no incluye credenciales SMTP, contraseñas ni cuerpos con
   secretos.
-- Se mantiene el límite actual de 200 correos.
+- Se mantiene el límite actual de 200 correos en `GET /api/correos`.
+- Un correo antiguo que haya quedado fuera de los 200 más recientes puede
+  consultarse de forma protegida mediante `GET /api/correos/{id}` (solo
+  Administrador; `200` con la misma proyección sin cuerpo, `404` si no
+  existe).
 
 **Comprobación**
 
-- `CorreosControllerTests` con sesiones de Administrador y Estándar.
-- Prueba de persistencia que lea la cola con un contexto nuevo.
-- Negativos: Estándar → `403`; sin sesión, token inválido o vencido → `401`.
+- `CorreosControllerTests` y `CorreosHttpTests` con sesiones de Administrador,
+  Estándar y sesiones inválidas (`GET /api/correos` y `GET /api/correos/{id}`).
+- Prueba de persistencia que lea la cola con un contexto nuevo, verifique el
+  límite de 200 y consulte un correo antiguo por su identificador.
+- Negativos: Estándar → `403`; sin sesión, token inválido o vencido → `401`;
+  identificador inexistente → `404`.
 
 ### RF-NOT-12 — Un correo enviado no se vuelve a enviar
 
@@ -957,7 +965,7 @@ reproducibles.
 | D-NOT-12 | Doble procesamiento. | RF-NOT-12 se garantiza solo para ejecuciones secuenciales: la segunda ejecución no encuentra el correo `Pendiente`. Las pruebas de procesamiento consecutivo no demuestran exclusión mutua entre workers concurrentes ni recuperación ante una caída posterior al envío y anterior a la persistencia de `Enviado`; esos casos no se prometen ni se usan como criterio de aceptación. |
 | D-NOT-13 | Contenido de los mensajes. | El texto exacto no es un requisito. Las pruebas verifican datos clave (solicitante, permiso, resultado, motivo, espacio, fecha y horario) y que no haya secretos; no comparan una redacción literal. |
 | D-NOT-14 | Reintentos y notificaciones. | Reintentar el envío de un correo no crea otra notificación. Repetir una operación de negocio rechazada tampoco crea una notificación nueva. |
-| D-NOT-15 | Reutilización de la cola. | Se conservan `CorreoEnCola`, `IColaCorreosRepository`, `ProcesadorColaCorreos`, `ColaCorreosWorker`, el límite de 3 fallos y `GET /api/correos`. Las notificaciones solo agregan correos a esa cola; no se crea una segunda cola ni un segundo worker. |
+| D-NOT-15 | Reutilización de la cola. | Se conservan `CorreoEnCola`, `IColaCorreosRepository`, `ProcesadorColaCorreos`, `ColaCorreosWorker`, el límite de 3 fallos y `GET /api/correos` (hasta 200 registros), añadiendo `GET /api/correos/{id}` (solo Administrador, sin exponer el cuerpo) para consultar cualquier correo antiguo fuera de los 200 más recientes. Las notificaciones solo agregan correos a esa cola; no se crea una segunda cola ni un segundo worker. |
 | D-NOT-16 | Semántica de `Intentos`. | `Intentos` cuenta **fallos**, no envíos exitosos: se incrementa solo cuando el envío lanza. Al tercer fallo el correo queda `Fallido` y deja de ser candidato porque el procesador solo consulta `Pendiente`. Un envío exitoso conserva el número de fallos previos y limpia `UltimoError`. |
 | D-REP-01 | Reporte del Core. | Se elige «solicitudes de permiso agrupadas por estado actual», no documentos por usuario. Se filtra por `CreadaEn`. |
 | D-REP-02 | Reporte del negocio. | Se elige «horas totales y cantidad de reservas por espacio», solo `Confirmada` y `Finalizada`, con duración promedio. Se filtra por `Fecha` de la reserva, no por `CreadaEn`. |
