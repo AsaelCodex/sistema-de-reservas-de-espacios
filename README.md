@@ -923,14 +923,43 @@ ficticios.
 Para verificar el envío SMTP real sin cuentas externas ni credenciales reales,
 el archivo `docker-compose.smtp.yml` añade un contenedor `mailpit`
 (`axllent/mailpit:latest`), publica su interfaz web/API **únicamente en
-localhost** (`127.0.0.1:8025:8025`) y apunta la API a `mailpit:1025`.
+localhost** (`127.0.0.1:8025:8025`) y fija deliberadamente en la API:
 
-Comandos exactos de arranque aislado:
+- `CorreoSmtp__Host: "mailpit"`
+- `CorreoSmtp__Puerto: "1025"`
+- `CorreoSmtp__Usuario: ""` y `CorreoSmtp__Password: ""` (vacíos)
+- `CorreoSmtp__De: "no-responder@reservas.local"`
+- `CorreoSmtp__Ssl: "false"`
+
+Así la composición de demostración selecciona siempre el servidor local de
+captura, sin heredar `CorreoSmtp__Puerto=587` de `.env.example` ni credenciales
+de un SMTP externo que pudieran existir en `.env`. El archivo principal
+`docker-compose.yml` conserva intacto su comportamiento y su modo `.eml` por
+defecto.
+
+Comandos exactos de arranque y operación aislada:
+
+> **Atención sobre `.env`:** si ya tiene un archivo `.env` local (por ejemplo,
+> con su clave de WeatherAPI), **no** ejecute `Copy-Item .env.example .env`
+> porque lo sobrescribiría. Solo cree `.env` si aún no existe, o use una copia
+> temporal con `--env-file` para verificar sin tocar su `.env`:
 
 ```powershell
-Copy-Item .env.example .env
+# Solo si aún no existe .env en el repositorio:
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+
+# Arranque del proyecto aislado incluyendo ambos archivos Compose:
 docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml up --build -d
+
+# Estado y registros de la composición de demostración:
+docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml ps
+docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml logs -f api
 ```
+
+Todos los comandos que operan sobre este despliegue (`ps`, `logs`, `stop`,
+`start`, `down`) deben incluir `-p reservas-smtp -f docker-compose.yml -f
+docker-compose.smtp.yml` para que Compose conozca el servicio `mailpit` y la
+sobreescritura de variables.
 
 Pasos de comprobación:
 
@@ -952,8 +981,8 @@ curl.exe -s "$base/api/notificaciones" -H "Authorization: $adm"
 # 200: [{"tipo":"SolicitudPermisoCreada","mensaje":"Nueva solicitud de permiso CrearReserva de ...","leida":false,...}]
 ```
 
-4. **Comprobar el mensaje capturado por SMTP** (tras ~5 s del worker en
-   Compose):
+4. **Comprobar el mensaje capturado por SMTP** (tras el siguiente ciclo del
+   worker):
 
 ```powershell
 curl.exe -s "http://localhost:8025/api/v1/messages"
@@ -967,6 +996,13 @@ curl.exe -s "http://localhost:8025/api/v1/messages"
 ```powershell
 curl.exe -s "$base/api/correos" -H "Authorization: $adm"
 # 200: [{"id":"...","destinatario":"admin@reservas.local","asunto":"Nueva solicitud de permiso","estado":"Enviado","intentos":0,"fechaCreacion":"...","fechaEnvio":"...","ultimoError":null}, ...]
+```
+
+6. **Limpieza al terminar la demostración** (elimina únicamente los contenedores
+   y volúmenes del proyecto `reservas-smtp`):
+
+```powershell
+docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml down -v
 ```
 
 > **Captura SMTP local vs. recepción en buzón externo:** un servidor de captura
@@ -1006,13 +1042,17 @@ lanza una excepción:
 
 **Cómo provocar el fallo manteniendo API y BD activas:**
 
-Con la composición de Mailpit en marcha, detener solo el contenedor SMTP:
+Con la composición de Mailpit en marcha, detener únicamente el contenedor
+`mailpit` indicando la misma composición completa:
 
 ```powershell
-docker compose -p reservas-smtp stop mailpit
+docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml stop mailpit
+docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml ps
 ```
 
-(En ejecución local con `dotnet run`, apuntar `CorreoSmtp__Host=127.0.0.1` a un
+(Para reactivar el servidor SMTP más adelante sin recrear el entorno:
+`docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml start mailpit`.
+En ejecución local con `dotnet run`, apuntar `CorreoSmtp__Host=127.0.0.1` a un
 puerto local cerrado o detener el receptor SMTP local mientras la API y
 LocalDB siguen corriendo).
 
@@ -1020,17 +1060,24 @@ LocalDB siguen corriendo).
    `PUT /api/solicitudes-permisos/{id}/aprobar`). La operación responde `200`
    de inmediato (`RF-NOT-08`), la solicitud pasa a `Aplicada` y la notificación
    interna del solicitante queda disponible en `GET /api/notificaciones`.
-2. Consultar `GET /api/correos` como Administrador tras cada ciclo del worker:
-   - Con `Correo__IntervaloSegundos=5` (en `docker-compose.yml`), los tres
-     fallos se completan en aproximadamente **15 segundos** (un fallo cada ~5 s;
-     si el host no responde al SYN TCP, cada intento falla por rechazo de
-     conexión o a lo sumo tras el timeout de 10 s de `SmtpEnvioCorreo`).
+2. Consultar `GET /api/correos` (o `GET /api/correos/{id}`) como Administrador
+   tras cada ciclo del worker:
+   - **Tiempos reales de espera:** `ColaCorreosWorker` procesa el lote actual
+     (hasta 20 correos pendientes en serie) y **después** espera
+     `Correo:IntervaloSegundos` (`Task.Delay(_intervalo)`) antes del siguiente
+     ciclo. Por tanto, el tiempo total hasta alcanzar 3 fallos no es un valor
+     fijo: depende de en qué punto de la pausa actual se encoló el correo, de
+     cuánto tarda cada intento de envío en fallar (inmediato si hay rechazo
+     TCP/DNS o respuesta `4xx`/`5xx`, o hasta el timeout de 10 s por correo en
+     `SmtpEnvioCorreo` si el destino no responde) y de cuántos correos
+     pendientes haya delante en el lote. Para un único correo pendiente, cada
+     ciclo dura `duración_del_fallo + IntervaloSegundos`.
    - Tras el 1.er y 2.º ciclo se observa `estado: "Pendiente"` con
      `intentos: 1` e `intentos: 2`.
    - Tras el 3.er ciclo se observa `estado: "Fallido"`, `intentos: 3`,
      `fechaEnvio: null` y `ultimoError` poblado (sin credenciales).
-   - Esperar un 4.º ciclo adicional (~5–10 s) y volver a consultar confirma que
-     `estado` sigue en `"Fallido"` e `intentos` permanece en `3`.
+   - Esperar un 4.º ciclo adicional y volver a consultar confirma que `estado`
+     sigue en `"Fallido"` e `intentos` permanece en `3`.
 
 ### 4. Verificación de envíos sin duplicados (`RF-NOT-12`, `D-NOT-12`)
 
@@ -1101,7 +1148,7 @@ Authorization: Bearer <token-administrador>
     (`RF-NOT-08` a `RF-NOT-12`, `RD-09`): persistencia real en SQL Server
     LocalDB con contextos nuevos para no duplicación, 3 fallos + 4.º ciclo sin
     reintento, límite de 200 y consulta por ID.
-- **Demostración operativa ejecutada en este entorno:**
+- **Demostración operativa local ejecutada con SQL Server LocalDB (no sustituye la ejecución de Docker Compose):**
   - Se levantó la API compilada (`SistemaDeReservas.API`) en `Production`
     contra una base limpia en SQL Server LocalDB, con `ColaCorreosWorker`
     activo y un servidor SMTP de captura en `127.0.0.1`:
@@ -1121,11 +1168,14 @@ Authorization: Bearer <token-administrador>
     3. Se verificaron por HTTP `GET /api/correos` y `GET /api/correos/{id}` sin
        sesión (`401`), con token inválido (`401`), con sesión de Estándar
        (`403`) y con sesión de Administrador (`200`).
-- **Pendiente en el host actual:** el demonio de Docker Desktop
-  (`dockerDesktopLinuxEngine`) no estaba en ejecución en esta máquina al
-  correr la verificación, por lo que la composición `docker-compose.smtp.yml`
-  con el contenedor `axllent/mailpit` quedó preparada y documentada para
-  ejecutarse en cuanto el demonio de Docker esté iniciado.
+- **Pendiente de ejecución en Docker Compose:** el demonio de Docker Desktop
+  (`dockerDesktopLinuxEngine`) no está en ejecución en este host. La
+  configuración combinada de `docker-compose.yml` + `docker-compose.smtp.yml`
+  fue validada con `docker compose config` usando una copia temporal de
+  `.env.example` (`Host=mailpit`, `Puerto=1025`, `Ssl=false`,
+  `Autenticado=false`), pero la ejecución en vivo de los contenedores
+  (`docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml up/stop/down`)
+  queda pendiente hasta disponer de un demonio de Docker activo.
 
 ## Pruebas
 
