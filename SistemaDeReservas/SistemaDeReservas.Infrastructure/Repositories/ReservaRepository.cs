@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Reports;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Infrastructure.Data;
 
@@ -10,6 +11,7 @@ namespace SistemaDeReservas.Infrastructure.Repositories;
 public class ReservaRepository : IReservaRepository
 {
     private const int TiempoEsperaBloqueoPredeterminadoMs = 15000;
+    private const decimal SegundosPorHora = 3600m;
 
     private readonly AppDbContext _context;
     private readonly int _tiempoEsperaBloqueoMs;
@@ -149,6 +151,67 @@ public class ReservaRepository : IReservaRepository
         // Un solo SaveChanges: el estado de la reserva y la entrega se
         // confirman juntos o se revierten juntos (D-NOT-09).
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// RF-REP-02, RF-REP-03, RF-REP-04, RF-REP-05 y RF-NEG-08: filtra en SQL
+    /// por fecha de calendario (<c>Fecha &gt;= desde</c> y <c>Fecha &lt;= hasta</c>,
+    /// nunca por <c>CreadaEn</c>), incluye solo <c>Confirmada</c> y
+    /// <c>Finalizada</c>, aplica la restricción de propietario antes de agrupar
+    /// cuando <paramref name="usuarioId"/> tiene valor y agrupa por espacio
+    /// normalizado en SQL Server (<c>COUNT(*)</c> y <c>SUM(DATEDIFF(second, ...))</c>).
+    /// La conversión a horas decimales se realiza con precisión <see cref="decimal"/>
+    /// (<c>segundos / 3600m</c>) para evitar el truncamiento por división entera de SQL.
+    /// </summary>
+    public async Task<IReadOnlyList<GrupoReservasPorEspacio>> AgruparPorEspacioAsync(
+        DateTime desdeFechaInclusive,
+        DateTime hastaFechaInclusive,
+        Guid? usuarioId,
+        CancellationToken cancellationToken = default)
+    {
+        var desde = desdeFechaInclusive.Date;
+        var hasta = hastaFechaInclusive.Date;
+
+        var consulta = _context.Reservas
+            .AsNoTracking()
+            .Where(r =>
+                r.Fecha >= desde &&
+                r.Fecha <= hasta &&
+                (r.Estado == EstadoReserva.Confirmada || r.Estado == EstadoReserva.Finalizada));
+
+        if (usuarioId is not null)
+        {
+            var propietarioId = usuarioId.Value;
+            consulta = consulta.Where(r => r.UsuarioId == propietarioId);
+        }
+
+        var filas = await consulta
+            .GroupBy(r => r.Espacio.Trim().ToUpper())
+            .Select(grupo => new
+            {
+                Espacio = grupo.Key,
+                CantidadReservas = grupo.Count(),
+                SegundosTotales = grupo.Sum(
+                    r => (long)EF.Functions.DateDiffSecond(r.HoraInicio, r.HoraFin))
+            })
+            .OrderBy(fila => fila.Espacio)
+            .ToListAsync(cancellationToken);
+
+        return filas
+            .Select(fila =>
+            {
+                var horasTotales = fila.SegundosTotales / SegundosPorHora;
+                var duracionPromedio = fila.CantidadReservas > 0
+                    ? horasTotales / fila.CantidadReservas
+                    : 0m;
+
+                return new GrupoReservasPorEspacio(
+                    EspacioReserva.Normalizar(fila.Espacio),
+                    fila.CantidadReservas,
+                    horasTotales,
+                    duracionPromedio);
+            })
+            .ToList();
     }
 
     /// <summary>

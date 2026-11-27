@@ -196,9 +196,13 @@ namespace SistemaDeReservas.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreadaEn", "Estado");
+
                     b.HasIndex("SolicitanteId", "Permiso")
                         .IsUnique()
                         .HasFilter("[Estado] = 0");
+
+                    b.HasIndex("SolicitanteId", "CreadaEn", "Estado");
 
                     b.ToTable("SolicitudesPermiso");
                 });
@@ -234,7 +238,9 @@ namespace SistemaDeReservas.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UsuarioId");
+                    b.HasIndex("Fecha", "Estado", "Espacio");
+
+                    b.HasIndex("UsuarioId", "Fecha", "Estado", "Espacio");
 
                     b.ToTable("Reservas");
                 });

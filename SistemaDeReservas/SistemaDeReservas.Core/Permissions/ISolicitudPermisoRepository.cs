@@ -1,4 +1,5 @@
 using SistemaDeReservas.Core.Notifications;
+using SistemaDeReservas.Core.Reports;
 
 namespace SistemaDeReservas.Core.Permissions;
 
@@ -45,5 +46,17 @@ public interface ISolicitudPermisoRepository
         SolicitudPermiso solicitud,
         PermisoOtorgado? permiso,
         IReadOnlyList<EntregaNotificacion> entregas,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// RF-REP-01, RF-REP-03, RF-REP-04 y RF-REP-05: agrupa en persistencia las
+    /// solicitudes por su estado actual dentro del rango de instantes UTC de
+    /// <see cref="SolicitudPermiso.CreadaEn"/>. Si <paramref name="solicitanteId"/>
+    /// tiene valor, filtra por ese propietario antes de agrupar.
+    /// </summary>
+    Task<IReadOnlyList<GrupoSolicitudesPorEstado>> AgruparPorEstadoAsync(
+        DateTime desdeUtcInclusive,
+        DateTime? hastaUtcExclusivo,
+        Guid? solicitanteId,
         CancellationToken cancellationToken = default);
 }
