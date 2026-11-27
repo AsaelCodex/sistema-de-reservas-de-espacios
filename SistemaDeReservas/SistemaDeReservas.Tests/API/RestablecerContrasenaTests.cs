@@ -78,6 +78,28 @@ public class RestablecerContrasenaTests
     }
 
     [Fact]
+    [Trait("Requerimiento", "RF-NOT-07")]
+    [Trait("Requerimiento", "RF-CA-13")]
+    public async Task Admin_ForcedReset_WithPreferenceDisabled_StillEnqueuesEmail()
+    {
+        var usuario = await RegistrarYActivarAsync(Correo);
+        await _usuarios.ActualizarPreferenciaCorreoAsync(usuario.Id, false);
+        await CrearUsuarioAsync(Rol.Administrador);
+        var antes = _colaCorreos.Correos.Count;
+
+        var resultado = await _controller.PutContrasena(usuario.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(resultado);
+        Assert.False(usuario.RecibirCorreosNotificacion);
+        Assert.Equal(antes + 1, _colaCorreos.Correos.Count);
+
+        var correo = _colaCorreos.Correos[^1];
+        Assert.Equal(Correo, correo.Destinatario);
+        Assert.Equal(RecuperacionContrasena.AsuntoCorreo, correo.Asunto);
+        Assert.Equal(EstadoCorreo.Pendiente, correo.Estado);
+    }
+
+    [Fact]
     [Trait("Requerimiento", "RF-CA-13")]
     public async Task Admin_ForcedReset_WithRedemption_OldStopsWorkingAndSessionsRejected()
     {

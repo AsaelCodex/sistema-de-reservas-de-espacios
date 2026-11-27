@@ -52,6 +52,26 @@ public class CodigoRecuperacionTests
     }
 
     [Fact]
+    [Trait("Requerimiento", "RF-NOT-07")]
+    [Trait("Requerimiento", "RF-CA-10")]
+    public async Task Post_WithPreferenceDisabled_StillEnqueuesRecoveryEmail()
+    {
+        var usuario = await CrearUsuarioAsync();
+        await _usuarios.ActualizarPreferenciaCorreoAsync(usuario.Id, false);
+
+        var resultado = await _controller.Post(Solicitud(Correo), CancellationToken.None);
+
+        var respuesta = Assert.IsAssignableFrom<ObjectResult>(resultado);
+        Assert.Equal(StatusCodes.Status200OK, respuesta.StatusCode);
+        Assert.False(usuario.RecibirCorreosNotificacion);
+
+        var correo = Assert.Single(_colaCorreos.Correos);
+        Assert.Equal(Correo, correo.Destinatario);
+        Assert.Equal(RecuperacionContrasena.AsuntoCorreo, correo.Asunto);
+        Assert.Equal(EstadoCorreo.Pendiente, correo.Estado);
+    }
+
+    [Fact]
     [Trait("Requerimiento", "RF-CA-10")]
     public async Task Post_WithUnknownEmail_GeneratesNothing()
     {

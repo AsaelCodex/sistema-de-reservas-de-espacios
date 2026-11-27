@@ -7,6 +7,7 @@ using SistemaDeReservas.Core.Notifications;
 using SistemaDeReservas.Core.Permissions;
 using SistemaDeReservas.Core.Reservations;
 using SistemaDeReservas.Core.Users;
+using SistemaDeReservas.Infrastructure.Data;
 using SistemaDeReservas.Infrastructure.Repositories;
 using SistemaDeReservas.Tests.Fakes;
 
@@ -118,14 +119,26 @@ public class EventosNotificacionesPersistenciaTests : BasePruebaPersistencia
     [Trait("Requerimiento", "RF-NOT-01")]
     [Trait("Requerimiento", "RF-NOT-06")]
     [Trait("Requerimiento", "RD-09")]
-    public async Task CrearSolicitud_WhenNotificationInsertFails_RollsBackRequest()
+    public async Task CrearSolicitud_WhenBusinessWriteFails_RollsBackNotificationAndEmail()
     {
         await CrearUsuarioAsync(Rol.Administrador);
         var ana = await CrearUsuarioAsync(Rol.Estandar);
 
-        await Assert.ThrowsAnyAsync<Exception>(() =>
-            SolicitarConInterceptorAsync(
-                ana.Id, new FalloAlInsertarNotificacionInterceptor()));
+        // EF ordena las escrituras de la entrega antes de la solicitud. Se
+        // falla en el último comando (la solicitud) para demostrar que la
+        // notificación y el correo ya se habían escrito dentro de la misma
+        // transacción y que el rollback no deja ninguna de las tres.
+        var interceptor = new FalloEnEscrituraInterceptor(
+            "INSERT INTO [SolicitudesPermiso]");
+        var excepcion = await Assert.ThrowsAnyAsync<Exception>(() =>
+            SolicitarConInterceptorAsync(ana.Id, interceptor));
+
+        AssertFalloInducido(excepcion);
+        AssertEvidenciaAtomicidad(
+            interceptor,
+            "INSERT INTO [SolicitudesPermiso]",
+            "INSERT INTO [Notificaciones]",
+            "INSERT INTO [CorreosEnCola]");
 
         await using var contexto = NuevoContexto();
         Assert.Empty(await contexto.SolicitudesPermiso.ToListAsync());
@@ -170,22 +183,34 @@ public class EventosNotificacionesPersistenciaTests : BasePruebaPersistencia
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-NOT-02")]
     [Trait("Requerimiento", "RD-09")]
-    public async Task Aprobar_WhenNotificationInsertFails_RollsBackStateAndPermission()
+    public async Task Aprobar_WhenBusinessWriteFails_RollsBackPermissionNotificationAndEmail()
     {
         var ana = await CrearUsuarioAsync(Rol.Estandar);
         var admin = await CrearUsuarioAsync(Rol.Administrador);
         var solicitud = await CrearSolicitudAsync(ana.Id);
 
-        await Assert.ThrowsAnyAsync<Exception>(() =>
-            AprobarConInterceptorAsync(
-                solicitud.Id,
-                admin.Id,
-                new FalloAlInsertarNotificacionInterceptor()));
+        // La actualización de la solicitud es el último comando de EF. Al
+        // fallar allí ya se habían escrito la notificación, el correo y el
+        // permiso otorgado dentro de la transacción.
+        var interceptor = new FalloEnEscrituraInterceptor(
+            "UPDATE [SolicitudesPermiso]");
+        var excepcion = await Assert.ThrowsAnyAsync<Exception>(() =>
+            AprobarConInterceptorAsync(solicitud.Id, admin.Id, interceptor));
+
+        AssertFalloInducido(excepcion);
+        AssertEvidenciaAtomicidad(
+            interceptor,
+            "UPDATE [SolicitudesPermiso]",
+            "INSERT INTO [Notificaciones]",
+            "INSERT INTO [CorreosEnCola]",
+            "INSERT INTO [PermisosOtorgados]");
 
         await using var contexto = NuevoContexto();
         var persistida = await contexto.SolicitudesPermiso
             .SingleAsync(s => s.Id == solicitud.Id);
         Assert.Equal(EstadoSolicitudPermiso.Pendiente, persistida.Estado);
+        Assert.Null(persistida.AprobadorId);
+        Assert.Null(persistida.ResueltaEn);
         Assert.Empty(await contexto.PermisosOtorgados.ToListAsync());
         Assert.Empty(await contexto.Notificaciones.ToListAsync());
         Assert.Empty(await contexto.CorreosEnCola.ToListAsync());
@@ -254,6 +279,43 @@ public class EventosNotificacionesPersistenciaTests : BasePruebaPersistencia
     [LocalDbFact]
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-NOT-02")]
+    [Trait("Requerimiento", "RF-NOT-06")]
+    [Trait("Requerimiento", "RD-09")]
+    public async Task Rechazar_WhenBusinessWriteFails_RollsBackNotificationAndEmail()
+    {
+        var ana = await CrearUsuarioAsync(Rol.Estandar);
+        var admin = await CrearUsuarioAsync(Rol.Administrador);
+        var solicitud = await CrearSolicitudAsync(ana.Id);
+
+        // Igual que en la aprobación, la actualización de la solicitud es el
+        // último comando: notificación y correo ya estaban escritos.
+        var interceptor = new FalloEnEscrituraInterceptor(
+            "UPDATE [SolicitudesPermiso]");
+        var excepcion = await Assert.ThrowsAnyAsync<Exception>(() =>
+            RechazarConInterceptorAsync(
+                solicitud.Id, admin.Id, "No cumple", interceptor));
+
+        AssertFalloInducido(excepcion);
+        AssertEvidenciaAtomicidad(
+            interceptor,
+            "UPDATE [SolicitudesPermiso]",
+            "INSERT INTO [Notificaciones]",
+            "INSERT INTO [CorreosEnCola]");
+
+        await using var contexto = NuevoContexto();
+        var persistida = await contexto.SolicitudesPermiso
+            .SingleAsync(s => s.Id == solicitud.Id);
+        Assert.Equal(EstadoSolicitudPermiso.Pendiente, persistida.Estado);
+        Assert.Null(persistida.AprobadorId);
+        Assert.Null(persistida.ResueltaEn);
+        Assert.Null(persistida.MotivoRechazo);
+        Assert.Empty(await contexto.Notificaciones.ToListAsync());
+        Assert.Empty(await contexto.CorreosEnCola.ToListAsync());
+    }
+
+    [LocalDbFact]
+    [Trait("Categoria", "Persistencia")]
+    [Trait("Requerimiento", "RF-NOT-02")]
     [Trait("Requerimiento", "RF-NOT-07")]
     [Trait("Requerimiento", "RD-09")]
     public async Task Aprobar_WithRequesterPreferenceDisabled_PersistsOnlyNotification()
@@ -309,18 +371,29 @@ public class EventosNotificacionesPersistenciaTests : BasePruebaPersistencia
     [Trait("Categoria", "Persistencia")]
     [Trait("Requerimiento", "RF-NOT-03")]
     [Trait("Requerimiento", "RD-09")]
-    public async Task ConfirmarReserva_WhenNotificationInsertFails_RollsBackState()
+    public async Task ConfirmarReserva_WhenBusinessWriteFails_RollsBackNotificationAndEmail()
     {
         var ana = await CrearUsuarioAsync(Rol.Estandar);
         var admin = await CrearUsuarioAsync(Rol.Administrador);
         var reserva = await CrearReservaAsync(ana.Id);
 
-        await Assert.ThrowsAnyAsync<Exception>(() =>
+        // La actualización de la reserva es el último comando de EF; al fallar
+        // allí, la notificación y el correo previos deben revertirse.
+        var interceptor = new FalloEnEscrituraInterceptor(
+            "UPDATE [Reservas]");
+        var excepcion = await Assert.ThrowsAnyAsync<Exception>(() =>
             TransicionarAsync(
                 reserva.Id,
                 EstadoReserva.Confirmada,
                 new ActorReserva(admin.Id, Rol.Administrador),
-                new FalloAlInsertarNotificacionInterceptor()));
+                interceptor));
+
+        AssertFalloInducido(excepcion);
+        AssertEvidenciaAtomicidad(
+            interceptor,
+            "UPDATE [Reservas]",
+            "INSERT INTO [Notificaciones]",
+            "INSERT INTO [CorreosEnCola]");
 
         await using var contexto = NuevoContexto();
         var persistida = await contexto.Reservas
@@ -513,7 +586,7 @@ public class EventosNotificacionesPersistenciaTests : BasePruebaPersistencia
     {
         await using var contexto = interceptor is null
             ? NuevoContexto()
-            : NuevoContexto(interceptor);
+            : NuevoContextoConComandosSeparados(interceptor);
         var servicio = new TransicionReservaService(
             new ReservaRepository(contexto),
             new NotificacionesEventoService(new UsuarioRepository(contexto)));
@@ -525,22 +598,113 @@ public class EventosNotificacionesPersistenciaTests : BasePruebaPersistencia
         Guid aprobadorId,
         IInterceptor interceptor)
     {
-        await using var contexto = NuevoContexto(interceptor);
+        await using var contexto = NuevoContextoConComandosSeparados(interceptor);
         var servicio = new ResolucionSolicitudService(
             new SolicitudPermisoRepository(contexto),
             new NotificacionesEventoService(new UsuarioRepository(contexto)));
         return await servicio.AprobarAsync(solicitudId, aprobadorId);
     }
 
+    private async Task<ResultadoResolucionSolicitud> RechazarConInterceptorAsync(
+        Guid solicitudId,
+        Guid rechazadorId,
+        string motivo,
+        IInterceptor interceptor)
+    {
+        await using var contexto = NuevoContextoConComandosSeparados(interceptor);
+        var servicio = new ResolucionSolicitudService(
+            new SolicitudPermisoRepository(contexto),
+            new NotificacionesEventoService(new UsuarioRepository(contexto)));
+        return await servicio.RechazarAsync(solicitudId, rechazadorId, motivo);
+    }
+
     private async Task<ResultadoCreacionSolicitud> SolicitarConInterceptorAsync(
         Guid solicitanteId,
         IInterceptor interceptor)
     {
-        await using var contexto = NuevoContexto(interceptor);
+        await using var contexto = NuevoContextoConComandosSeparados(interceptor);
         var servicio = new CrearSolicitudPermisoService(
             new SolicitudPermisoRepository(contexto),
             new PermisoOtorgadoRepository(contexto),
             new NotificacionesEventoService(new UsuarioRepository(contexto)));
         return await servicio.CrearAsync(solicitanteId, "CrearReserva");
+    }
+
+    /// <summary>
+    /// Contexto exclusivo de las pruebas de fallo inducido. MaxBatchSize(1)
+    /// obliga a EF a emitir un comando por escritura, de modo que el
+    /// interceptor puede observar qué comandos se ejecutaron antes del fallo.
+    /// No se cambia la configuración de producción.
+    /// </summary>
+    private AppDbContext NuevoContextoConComandosSeparados(IInterceptor interceptor)
+    {
+        var constructor = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(CadenaConexion, sql => sql.MaxBatchSize(1))
+            .AddInterceptors(interceptor);
+        return new AppDbContext(constructor.Options);
+    }
+
+    private static void AssertFalloInducido(Exception excepcion)
+    {
+        for (var actual = excepcion; actual is not null; actual = actual.InnerException)
+        {
+            if (actual is InvalidOperationException &&
+                actual.Message.Contains(
+                    FalloEnEscrituraInterceptor.MensajeFallo,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException(
+            "Se esperaba el fallo inducido " +
+            $"'{FalloEnEscrituraInterceptor.MensajeFallo}', pero se recibió " +
+            $"{excepcion.GetType().FullName}: {excepcion.Message}");
+    }
+
+    private static void AssertEvidenciaAtomicidad(
+        FalloEnEscrituraInterceptor interceptor,
+        string fragmentoObjetivo,
+        params string[] fragmentosPrevios)
+    {
+        Assert.Equal(1, interceptor.FallosInducidos);
+        var fallido = Assert.IsType<ComandoRegistrado>(interceptor.ComandoFallido);
+
+        Assert.True(
+            fallido.Texto.Contains(
+                fragmentoObjetivo, StringComparison.OrdinalIgnoreCase),
+            $"El comando fallido no contiene '{fragmentoObjetivo}'.");
+        Assert.True(
+            fallido.EnTransaccion,
+            "El comando fallido no se ejecutó dentro de una transacción.");
+
+        var previos = interceptor.Ejecutados
+            .Where(comando => fragmentosPrevios.Any(fragmento =>
+                comando.Texto.Contains(
+                    fragmento, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        Assert.NotEmpty(previos);
+        foreach (var fragmento in fragmentosPrevios)
+        {
+            Assert.Contains(previos, comando =>
+                comando.Texto.Contains(
+                    fragmento, StringComparison.OrdinalIgnoreCase));
+        }
+
+        Assert.All(previos, comando =>
+        {
+            Assert.True(
+                comando.EnTransaccion,
+                $"La escritura previa no estaba en la transacción: {comando.Texto}");
+            Assert.True(
+                comando.Orden < fallido.Orden,
+                "La escritura previa se registró después del fallo inducido.");
+        });
+
+        Assert.DoesNotContain(
+            interceptor.Ejecutados,
+            comando => comando.Orden > fallido.Orden);
     }
 }
