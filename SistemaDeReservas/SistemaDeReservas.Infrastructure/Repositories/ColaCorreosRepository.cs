@@ -34,8 +34,17 @@ public class ColaCorreosRepository : IColaCorreosRepository
     {
         return await _context.CorreosEnCola
             .OrderByDescending(correo => correo.FechaCreacion)
+            .ThenBy(correo => correo.Id)
             .Take(limite)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<CorreoEnCola?> ObtenerPorIdAsync(
+        Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.CorreosEnCola
+            .AsNoTracking()
+            .FirstOrDefaultAsync(correo => correo.Id == id, cancellationToken);
     }
 
     public async Task ActualizarAsync(CorreoEnCola correo, CancellationToken cancellationToken = default)

@@ -50,6 +50,12 @@ services:
       AdministradorInicial__Correo: "${ADMINISTRADOR_INICIAL_CORREO:-}"
       AdministradorInicial__Contrasena: "${ADMINISTRADOR_INICIAL_CONTRASENA:-}"
       Correo__IntervaloSegundos: "5"
+      CorreoSmtp__Host: "${CorreoSmtp__Host:-}"
+      CorreoSmtp__Puerto: "${CorreoSmtp__Puerto:-}"
+      CorreoSmtp__Usuario: "${CorreoSmtp__Usuario:-}"
+      CorreoSmtp__Password: "${CorreoSmtp__Password:-}"
+      CorreoSmtp__De: "${CorreoSmtp__De:-}"
+      CorreoSmtp__Ssl: "${CorreoSmtp__Ssl:-}"
       WeatherApi__ApiKey: "${WeatherApi__ApiKey:-}"
     ports:
       - "127.0.0.1:5137:8080"

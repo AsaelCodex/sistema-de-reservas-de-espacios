@@ -10,5 +10,8 @@ public interface IColaCorreosRepository
     Task<IReadOnlyList<CorreoEnCola>> ObtenerTodasAsync(
         int limite, CancellationToken cancellationToken = default);
 
+    Task<CorreoEnCola?> ObtenerPorIdAsync(
+        Guid id, CancellationToken cancellationToken = default);
+
     Task ActualizarAsync(CorreoEnCola correo, CancellationToken cancellationToken = default);
 }
