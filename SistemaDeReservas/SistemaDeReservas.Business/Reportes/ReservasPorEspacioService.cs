@@ -5,7 +5,7 @@ namespace SistemaDeReservas.Business.Reportes;
 
 /// <summary>
 /// RF-REP-02, RF-REP-03, RF-REP-04, RF-REP-05 y RF-NEG-08: reporte del módulo
-/// de negocio que responde qué espacios concentran más horas de uso efectivo y
+/// de negocio que responde qué espacios concentran más horas reservadas y
 /// cuántas reservas confirmadas o finalizadas reciben en el período. Filtra
 /// por la fecha de calendario <see cref="Reserva.Fecha"/> y nunca por
 /// <see cref="Reserva.CreadaEn"/>.
