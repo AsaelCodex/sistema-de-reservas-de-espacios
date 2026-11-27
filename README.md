@@ -54,18 +54,22 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
   notificaciones propias (RF-NOT-04), el marcado como leída (RF-NOT-05), la
   persistencia y gestión de la preferencia de correo (RF-NOT-07), los eventos
   de permisos y reservas con entrega interna y encolado condicional de correo
-  (RF-NOT-01, RF-NOT-02, RF-NOT-03, RF-NOT-06 y RF-NOT-07) y la cola de correos
+  (RF-NOT-01, RF-NOT-02, RF-NOT-03, RF-NOT-06 y RF-NOT-07), la cola de correos
   completa con configuración SMTP por variables de entorno, reintentos
   limitados a 3 fallos, no duplicación y consulta administrativa por listado e
-  identificador (RF-NOT-08 a RF-NOT-13).
+  identificador (RF-NOT-08 a RF-NOT-13), y los dos reportes con agregación en
+  SQL, filtro por rango de fechas y restricción por rol: solicitudes de permiso
+  agrupadas por estado actual (RF-REP-01, RF-REP-03, RF-REP-04 y RF-REP-05) y
+  horas totales, cantidad y duración promedio de reservas confirmadas o
+  finalizadas agrupadas por espacio (RF-REP-02 a RF-REP-05 y RF-NEG-08).
   El detalle y la evidencia están en `docs/matriz-requisitos.md`. La
   comprobación final desde un clon limpio (P4-04) está en
   `docs/practica-4-cierre.md`.
-- **Pruebas:** 781 casos en verde (509 métodos de prueba, las teorías se
-  expanden): 736 casos sin LocalDB —negocio con fakes, seguridad, correo,
-  documentos, evaluación climática, notificaciones, controladores invocados
-  en memoria, pruebas HTTP con `WebApplicationFactory` y el flujo real
-  permisos–reservas con repositorios de prueba— y 45 casos de persistencia
+- **Pruebas:** 830 casos en verde (539 métodos de prueba, las teorías se
+  expanden): 781 casos sin LocalDB —negocio con fakes, seguridad, correo,
+  documentos, evaluación climática, notificaciones, reportes, controladores
+  invocados en memoria, pruebas HTTP con `WebApplicationFactory` y el flujo real
+  permisos–reservas con repositorios de prueba— y 49 casos de persistencia
   sobre SQL Server LocalDB (`SistemaDeReservas.Tests/Persistencia`), con una
   base propia por prueba que se elimina al terminar.
 - **Endpoints:**
@@ -108,17 +112,18 @@ WeatherAPI, con autorización por propietario o Administrador, regla del
 | `GET /api/documentos` | Listar documentos activos (propios; todos para Administrador) | Autenticado |
 | `GET /api/documentos/{id}/contenido` | Descargar el contenido (403 si es de otro Estándar) | Autenticado |
 | `DELETE /api/documentos/{id}` | Eliminación lógica (204; 403 si es de otro Estándar) | Autenticado |
+| `GET /api/reportes/solicitudes-por-estado?desde=&hasta=` | Reporte del Core: solicitudes de permiso agrupadas por estado actual en el rango UTC `CreadaEn` | Autenticado |
+| `GET /api/reportes/reservas-por-espacio?desde=&hasta=` | Reporte del negocio: reservas `Confirmada` y `Finalizada` agrupadas por espacio (cantidad, horas totales y promedio) en el rango de `Fecha` | Autenticado |
 
-- **Pendiente (piezas posteriores):** RF-DOC-06 (auditoría), Reportes
-  (RF-REP), Auditoría (RF-AUD) y el resto del módulo de negocio (RF-NEG-01,
-  RF-NEG-08 y RF-NEG-10).
+- **Pendiente (piezas posteriores):** RF-DOC-06 (auditoría), Auditoría
+  (RF-AUD) y el resto del módulo de negocio (RF-NEG-01 y RF-NEG-10).
 
 ## Requisitos
 
 - [.NET SDK 10](https://dotnet.microsoft.com/download) (`dotnet --version` debe mostrar 10.x)
 - Git
 - SQL Server (LocalDB, Express o superior) para ejecutar la API y para
-  las 45 pruebas de persistencia (si no está disponible, esas pruebas se
+  las 49 pruebas de persistencia (si no está disponible, esas pruebas se
   omiten con el motivo; ver «Pruebas»)
 - Entity Framework CLI, solo para aplicar migraciones:
   `dotnet tool install --global dotnet-ef`
@@ -1168,14 +1173,195 @@ Authorization: Bearer <token-administrador>
     3. Se verificaron por HTTP `GET /api/correos` y `GET /api/correos/{id}` sin
        sesión (`401`), con token inválido (`401`), con sesión de Estándar
        (`403`) y con sesión de Administrador (`200`).
-- **Pendiente de ejecución en Docker Compose:** el demonio de Docker Desktop
+- **Pendiente de ejecución en Docker Compose (P5-06):** el demonio de Docker Desktop
   (`dockerDesktopLinuxEngine`) no está en ejecución en este host. La
   configuración combinada de `docker-compose.yml` + `docker-compose.smtp.yml`
   fue validada con `docker compose config` usando una copia temporal de
   `.env.example` (`Host=mailpit`, `Puerto=1025`, `Ssl=false`,
   `Autenticado=false`), pero la ejecución en vivo de los contenedores
   (`docker compose -p reservas-smtp -f docker-compose.yml -f docker-compose.smtp.yml up/stop/down`)
-  queda pendiente hasta disponer de un demonio de Docker activo.
+  queda registrada como pendiente de P5-06 hasta disponer de un demonio de Docker activo.
+
+## Reportes (práctica 5, P5-05 — RF-REP-01 a RF-REP-05 y RF-NEG-08)
+
+Ambos reportes ejecutan los filtros de fecha, la restricción por rol y la
+agrupación directamente en SQL Server mediante consultas LINQ traducibles
+(`GROUP BY`, `COUNT`, `SUM(DATEDIFF(...))`), sin cargar las tablas en memoria
+(`ToList`/`AsEnumerable`) y sin exponer los registros individuales. La
+migración `AddIndicesReportes` crea los índices compuestos sobre las columnas
+filtradas y agrupadas (`IX_SolicitudesPermiso_CreadaEn_Estado`,
+`IX_SolicitudesPermiso_SolicitanteId_CreadaEn_Estado`,
+`IX_Reservas_Fecha_Estado_Espacio` e
+`IX_Reservas_UsuarioId_Fecha_Estado_Espacio`).
+
+### 1. Pregunta y alcance de cada reporte
+
+| Reporte | Ruta | Pregunta que responde | Estados incluidos |
+|---|---|---|---|
+| **Reporte del Core** (`RF-REP-01`) | `GET /api/reportes/solicitudes-por-estado?desde=yyyy-MM-dd&hasta=yyyy-MM-dd` | ¿Cuántas solicitudes de permiso creadas durante el período se encuentran hoy en cada estado? | Estado **actual** persistido (`Pendiente`, `Aprobada`, `Rechazada`, `Aplicada`). **No reconstruye estados históricos** por los que haya transitado una solicitud. |
+| **Reporte del negocio** (`RF-REP-02`, `RF-NEG-08`) | `GET /api/reportes/reservas-por-espacio?desde=yyyy-MM-dd&hasta=yyyy-MM-dd` | ¿Qué espacios concentran más horas de uso efectivo y cuántas reservas confirmadas o finalizadas reciben durante el período? | Exclusivamente `Confirmada` y `Finalizada`. Excluye `Solicitada`, `Rechazada` y `Cancelada`. |
+
+- **Grupos vacíos (`D-REP-05`):** se omiten los estados o espacios sin
+  registros en el período. Si el rango es válido pero no hay datos, responde
+  `200 OK` con `grupos: []` y totales en cero (`0` / `0.0`).
+- **Orden de los grupos (`D-REP-07`):**
+  - Core: orden del enum `EstadoSolicitudPermiso` (`Pendiente`, `Aprobada`,
+    `Rechazada`, `Aplicada`).
+  - Negocio: orden alfabético (`Ordinal`) por nombre de espacio normalizado
+    (`EspacioReserva.Normalizar`: mayúsculas invariantes sin espacios externos).
+- **Unidades y precisión (`D-REP-06`):** en el reporte del negocio,
+  `horasTotales`, `duracionPromedioHoras` y `totalHoras` se expresan en **horas
+  decimales** (nunca como porcentaje de ocupación). En SQL Server la duración se
+  suma en segundos (`SUM(CAST(DATEDIFF(second, HoraInicio, HoraFin) AS bigint))`)
+  y se convierte en `decimal` (`segundos / 3600m`), evitando cualquier división
+  entera; los valores finales se proyectan redondeados a un máximo de **2
+  decimales** (`MidpointRounding.AwayFromZero`).
+
+### 2. Autorización y restricción por rol (`RF-REP-04`, `RD-06`, `D-REP-04`)
+
+- Ambos endpoints declaran `[RequiereRol(NivelOperacion.Autenticado)]` y
+  validan la sesión en el servidor con `SesionService.ConsultarUsuarioAsync`
+  antes de consultar el negocio.
+- Sin cabecera `Authorization`, o con token desconocido, vencido o cerrado →
+  `401 Unauthorized`.
+- La identidad y el rol se obtienen **exclusivamente de la sesión**:
+  - **Administrador:** agrega todos los registros del período.
+  - **Estándar:** filtra por `SolicitanteId == usuarioSesion.Id` (Core) o
+    `UsuarioId == usuarioSesion.Id` (negocio) **antes** de ejecutar el
+    `GROUP BY`. Ningún conteo, suma ni promedio incorpora filas de otros
+    usuarios, y cualquier parámetro adicional en la query (`usuarioId`,
+    `solicitanteId`, `todos=true`) se ignora.
+
+### 3. Semántica de fechas y validación (`RF-REP-05`, `RD-07`, `RD-11`, `D-REP-03`)
+
+- `desde` y `hasta` son **obligatorios**, con formato exacto `yyyy-MM-dd` (sin
+  hora) y ambos extremos son **inclusivos**.
+- Parámetros ausentes, vacíos, con hora, con formato inválido o con
+  `desde > hasta` → `400 Bad Request`.
+- No se impone un límite arbitrario de días al rango.
+- **Reporte del Core (`SolicitudPermiso.CreadaEn`, instante UTC):** el rango
+  `[desde, hasta]` se traduce al intervalo semiabierto
+  `[desde 00:00:00Z, (hasta + 1 día) 00:00:00Z)`, es decir:
+  `CreadaEn >= desde 00:00:00Z` y `CreadaEn < (hasta + 1 día) 00:00:00Z`.
+  Cuando `hasta` es el extremo máximo `9999-12-31` (`DateOnly.MaxValue`), no se
+  suma un día para evitar desbordar `DateTime` y se incluye hasta el final de
+  `9999-12-31`.
+- **Reporte del negocio (`Reserva.Fecha`, fecha de calendario):** se filtra por
+  `Reserva.Fecha` (**nunca** por `Reserva.CreadaEn`), comparando directamente
+  `Fecha >= desde` y `Fecha <= hasta` sin conversión de zona horaria ni suma de
+  días.
+
+### 4. Ejemplos de consulta y respuestas
+
+Con una sesión válida en `$adm` (Administrador) o `$std` (Estándar):
+
+```powershell
+# Reporte del Core — marzo de 2026
+curl.exe -s "$base/api/reportes/solicitudes-por-estado?desde=2026-03-01&hasta=2026-03-31" `
+  -H "Authorization: $adm"
+
+# Reporte del Core — abril de 2026
+curl.exe -s "$base/api/reportes/solicitudes-por-estado?desde=2026-04-01&hasta=2026-04-30" `
+  -H "Authorization: $adm"
+
+# Reporte del negocio — marzo de 2026
+curl.exe -s "$base/api/reportes/reservas-por-espacio?desde=2026-03-01&hasta=2026-03-31" `
+  -H "Authorization: $adm"
+
+# Reporte del negocio — rango sin registros (mayo de 2026)
+curl.exe -s "$base/api/reportes/reservas-por-espacio?desde=2026-05-01&hasta=2026-05-31" `
+  -H "Authorization: $adm"
+```
+
+Respuesta de `GET /api/reportes/solicitudes-por-estado?desde=2026-03-01&hasta=2026-03-31`
+(Administrador, sobre el conjunto `S1–S7`):
+
+```json
+{
+  "desde": "2026-03-01",
+  "hasta": "2026-03-31",
+  "grupos": [
+    { "estado": "Pendiente", "cantidad": 1 },
+    { "estado": "Rechazada", "cantidad": 2 },
+    { "estado": "Aplicada", "cantidad": 2 }
+  ],
+  "total": 5
+}
+```
+
+Respuesta de `GET /api/reportes/reservas-por-espacio?desde=2026-03-01&hasta=2026-03-31`
+(Administrador, sobre el conjunto `R1–R8`):
+
+```json
+{
+  "desde": "2026-03-01",
+  "hasta": "2026-03-31",
+  "grupos": [
+    {
+      "espacio": "CANCHA 1",
+      "cantidadReservas": 2,
+      "horasTotales": 3.5,
+      "duracionPromedioHoras": 1.75
+    },
+    {
+      "espacio": "SALÓN A",
+      "cantidadReservas": 2,
+      "horasTotales": 3.5,
+      "duracionPromedioHoras": 1.75
+    }
+  ],
+  "totalReservas": 4,
+  "totalHoras": 7.0
+}
+```
+
+Respuesta de cualquier rango válido sin datos (por ejemplo, mayo
+`2026-05-01` a `2026-05-31`):
+
+- Core: `{"desde":"2026-05-01","hasta":"2026-05-31","grupos":[],"total":0}`
+- Negocio: `{"desde":"2026-05-01","hasta":"2026-05-31","grupos":[],"totalReservas":0,"totalHoras":0}`
+
+### 5. Datos reproducibles (`S1–S7` y `R1–R8`) y resultados esperados
+
+Definidos en `docs/criterios-notificaciones-reportes.md` (§2.2 y §2.3) y
+utilizados en `DatosPruebaReportes` (`SistemaDeReservas.Tests/Reportes`):
+
+**Solicitudes `S1–S7`:**
+- `S1` (`ana`, `Pendiente`, `2026-03-01T10:00:00Z`)
+- `S2` (`ana`, `Aplicada`, `2026-03-05T11:00:00Z`)
+- `S3` (`bruno`, `Rechazada`, `2026-03-10T12:00:00Z`)
+- `S4` (`ana`, `Aplicada`, `2026-03-20T13:00:00Z`)
+- `S5` (`bruno`, `Pendiente`, `2026-04-02T09:00:00Z`)
+- `S6` (`ana`, `Rechazada`, `2026-03-31T23:59:59Z` — entra en marzo)
+- `S7` (`bruno`, `Aplicada`, `2026-04-01T00:00:00Z` — entra en abril, no en marzo)
+
+| Rango | Rol / Usuario | Resultado esperado (`solicitudes-por-estado`) |
+|---|---|---|
+| `2026-03-01` a `2026-03-31` | `admin1` (Administrador) | `Pendiente: 1`, `Rechazada: 2`, `Aplicada: 2`, `total: 5` (3 grupos para 5 filas) |
+| `2026-03-01` a `2026-03-31` | `ana` (Estándar) | `Pendiente: 1`, `Rechazada: 1`, `Aplicada: 2`, `total: 4` (excluye `S3`) |
+| `2026-03-01` a `2026-03-31` | `bruno` (Estándar) | `Rechazada: 1`, `total: 1` (solo `S3`) |
+| `2026-04-01` a `2026-04-30` | `admin1` (Administrador) | `Pendiente: 1`, `Aplicada: 1`, `total: 2` (`S5` y `S7`) |
+| `2026-04-01` a `2026-04-30` | `ana` (Estándar) | `grupos: []`, `total: 0` |
+| `2026-05-01` a `2026-05-31` | Cualquiera | `grupos: []`, `total: 0` |
+
+**Reservas `R1–R8`:**
+- `R1` (`ana`, `SALÓN A`, `2026-03-02`, `08:00–10:00`, `Confirmada`, `2.0 h`)
+- `R2` (`ana`, `SALÓN A`, `2026-03-03`, `09:00–10:30`, `Finalizada`, `1.5 h`)
+- `R3` (`bruno`, `CANCHA 1`, `2026-03-04`, `14:00–16:00`, `Confirmada`, `2.0 h`)
+- `R4` (`ana`, `CANCHA 1`, `2026-04-10`, `10:00–12:00`, `Confirmada`, `2.0 h`, con `CreadaEn` en marzo para verificar que se filtra por `Fecha`)
+- `R5` (`ana`, `SALÓN A`, `2026-03-05`, `08:00–09:00`, `Rechazada`, excluida)
+- `R6` (`ana`, `SALÓN A`, `2026-03-06`, `08:00–09:00`, `Cancelada`, excluida)
+- `R7` (`ana`, `SALÓN A`, `2026-03-07`, `08:00–09:00`, `Solicitada`, excluida)
+- `R8` (`bruno`, `CANCHA 1`, `2026-03-31`, `18:00–19:30`, `Finalizada`, `1.5 h`)
+
+| Rango | Rol / Usuario | Resultado esperado (`reservas-por-espacio`) |
+|---|---|---|
+| `2026-03-01` a `2026-03-31` | `admin1` (Administrador) | `CANCHA 1`: `2` reservas, `3.5` h, prom. `1.75` h; `SALÓN A`: `2` reservas, `3.5` h, prom. `1.75` h; `totalReservas: 4`, `totalHoras: 7.0` |
+| `2026-03-01` a `2026-03-31` | `ana` (Estándar) | Solo `SALÓN A`: `2` reservas, `3.5` h, prom. `1.75` h; `totalReservas: 2`, `totalHoras: 3.5` |
+| `2026-03-01` a `2026-03-31` | `bruno` (Estándar) | Solo `CANCHA 1`: `2` reservas, `3.5` h, prom. `1.75` h; `totalReservas: 2`, `totalHoras: 3.5` |
+| `2026-04-01` a `2026-04-30` | `admin1` o `ana` | Solo `CANCHA 1`: `1` reserva (`R4`), `2.0` h, prom. `2.0` h; `totalReservas: 1`, `totalHoras: 2.0` |
+| `2026-04-01` a `2026-04-30` | `bruno` (Estándar) | `grupos: []`, `totalReservas: 0`, `totalHoras: 0` |
+| `2026-05-01` a `2026-05-31` | Cualquiera | `grupos: []`, `totalReservas: 0`, `totalHoras: 0` |
 
 ## Pruebas
 
@@ -1190,49 +1376,50 @@ Cada prueba declara el requisito que verifica con
 `[Trait("Requerimiento", "RF-GP-XX")]`,
 `[Trait("Requerimiento", "RF-DOC-XX")]`,
 `[Trait("Requerimiento", "RF-NOT-XX")]`,
+`[Trait("Requerimiento", "RF-REP-XX")]`,
 `[Trait("Requerimiento", "RF-NEG-XX")]` o
 `[Trait("Requerimiento", "RD-XX")]`.
 
 ### Qué necesita cada grupo de pruebas
 
 - **Entorno mínimo** (cualquier equipo con el .NET SDK 10): los
-  **736 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
-  de correo, de documentos, de evaluación climática, de notificaciones, las
-  pruebas de API que invocan los controladores en memoria, las pruebas HTTP
-  reales con `WebApplicationFactory`/`TestServer` y el flujo real
+  **781 casos sin LocalDB** — pruebas de negocio con fakes, de seguridad,
+  de correo, de documentos, de evaluación climática, de notificaciones, de
+  reportes, las pruebas de API que invocan los controladores en memoria, las
+  pruebas HTTP reales con `WebApplicationFactory`/`TestServer` y el flujo real
   permisos–reservas con repositorios de prueba. Esta parte no necesita base
   de datos ni servidor externo (la evaluación climática usa un transporte
   falso y la prueba SMTP usa un listener local efímero en loopback).
-- **Entorno con persistencia**: los **45 casos de persistencia LocalDB**
+- **Entorno con persistencia**: los **49 casos de persistencia LocalDB**
   (`SistemaDeReservas.Tests/Persistencia`, RD-09) requieren **SQL Server
   LocalDB** instalado y accesible en `(localdb)\MSSQLLocalDB`. Cada una
   crea su propia base `Reservas_Tests_*`, aplica las migraciones sobre una
   base vacía y la elimina al terminar (también cuando la prueba falla);
   tras la corrida no queda ninguna base temporal.
 
-Los 781 casos salen de **509 métodos de prueba**: 387 `[Fact]`, 77
-`[Theory]` y 45 `[LocalDbFact]`; las teorías se expanden en 349 casos con
+Los 830 casos salen de **539 métodos de prueba**: 409 `[Fact]`, 81
+`[Theory]` y 49 `[LocalDbFact]`; las teorías se expanden en 372 casos con
 `[InlineData]`, de modo que métodos y casos son conteos distintos.
 
 ```powershell
-# solo los 45 casos de persistencia LocalDB
+# solo los 49 casos de persistencia LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName~Persistencia"
 
-# solo los 736 casos sin LocalDB
+# solo los 781 casos sin LocalDB
 dotnet test SistemaDeReservas/SistemaDeReservas.sln --filter "FullyQualifiedName!~Persistencia"
 ```
 
 ### Cómo interpretar el resumen de `dotnet test`
 
-- **Ejecutadas** (`Pruebas totales`): casos descubiertos (781).
+- **Ejecutadas** (`Pruebas totales`): casos descubiertos (830).
 - **Fallidas** (`Con error` / `Incorrecto`): casos que no cumplieron su
   aserción; en una suite sana deben ser 0.
-- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 45
+- **Omitidas** (`Omitido`): casos que no corrieron. Solo aparecen los 49
   de persistencia cuando LocalDB no está disponible.
 
-Con LocalDB disponible la corrida completa es **781 ejecutadas /
-0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **736
-ejecutadas / 0 fallidas / 45 omitidas**.
+Con LocalDB disponible la corrida completa es **830 ejecutadas /
+0 fallidas / 0 omitidas**. Sin LocalDB y sin modo estricto: **781
+ejecutadas / 0 fallidas / 49 omitidas**.
 
 ### Modo estricto: `REQUIERE_PERSISTENCIA=1`
 
@@ -1250,9 +1437,9 @@ Comportamiento verificado de los tres escenarios:
 
 | Escenario | Resultado |
 |---|---|
-| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 781 ejecutadas, 0 fallidas, 0 omitidas. |
-| Sin LocalDB, modo normal | 736 ejecutadas, 0 fallidas, **45 omitidas** con el motivo. |
-| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 781 ejecutadas, **45 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 736 correctas. |
+| LocalDB disponible (con o sin `REQUIERE_PERSISTENCIA=1`) | 830 ejecutadas, 0 fallidas, 0 omitidas. |
+| Sin LocalDB, modo normal | 781 ejecutadas, 0 fallidas, **49 omitidas** con el motivo. |
+| Sin LocalDB, `REQUIERE_PERSISTENCIA=1` | 830 ejecutadas, **49 fallidas** por infraestructura (`InvalidOperationException` de `BasePruebaPersistencia.InitializeAsync` indicando que LocalDB no está disponible), 781 correctas. |
 
 - **Un fallo por ausencia de LocalDB es un problema de infraestructura,
   no es la detección de un defecto**: no prueba ningún comportamiento del
